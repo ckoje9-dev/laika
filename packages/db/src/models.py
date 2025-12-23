@@ -43,7 +43,25 @@ class File(Base):
     path_original: Mapped[str | None] = mapped_column(Text)
     path_dxf: Mapped[str | None] = mapped_column(Text)
     read_only: Mapped[bool] = mapped_column(Boolean, server_default=sa.text("false"), nullable=False)
+    layer_count: Mapped[int | None] = mapped_column(Integer)
+    entity_count: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=sa.text("now()"))
+
+
+class ConversionLog(Base):
+    __tablename__ = "conversion_logs"
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    file_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("files.id", ondelete="CASCADE"), nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_version: Mapped[str | None] = mapped_column(Text)
+    message: Mapped[str | None] = mapped_column(Text)
+    started_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=sa.text("now()"), nullable=False)
+    finished_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True))
+    width: Mapped[Numeric | None] = mapped_column(Numeric)
+    height: Mapped[Numeric | None] = mapped_column(Numeric)
+    layer_count: Mapped[int | None] = mapped_column(Integer)
+    entity_count: Mapped[int | None] = mapped_column(Integer)
 
 
 class DxfEntityRaw(Base):

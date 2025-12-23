@@ -5,6 +5,10 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from packages.db.src.session import SessionLocal
+
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[4]))
@@ -91,4 +95,50 @@ async def run(src: Optional[Path] = None, file_id: Optional[str] = None) -> Opti
         src = candidates[0]
 
     dest_path = STORAGE_DERIVED_PATH / f"{src.stem}.dxf"
-    return await convert_dwg_to_dxf(src, STORAGE_DERIVED_PATH)
+
+    # pending 로그 기록
+    if file_id:
+        async with SessionLocal() as session:
+            await session.execute(
+                text(
+                    """
+                    insert into conversion_logs (file_id, status, started_at)
+                    values (:file_id, 'pending', now())
+                    """
+                ),
+                {"file_id": file_id},
+            )
+            await session.commit()
+
+    try:
+        await convert_dwg_to_dxf(src, STORAGE_DERIVED_PATH)
+    except Exception as e:
+        if file_id:
+            async with SessionLocal() as session:
+                await session.execute(
+                    text(
+                        """
+                        insert into conversion_logs (file_id, status, message, started_at, finished_at)
+                        values (:file_id, 'failed', :msg, now(), now())
+                        """
+                    ),
+                    {"file_id": file_id, "msg": str(e)},
+                )
+                await session.commit()
+        raise
+
+    if file_id:
+        async with SessionLocal() as session:
+            await session.execute(
+                text(
+                    """
+                    update files set path_dxf = :path_dxf where id = :file_id;
+                    insert into conversion_logs (file_id, status, started_at, finished_at)
+                    values (:file_id, 'success', now(), now());
+                    """
+                ),
+                {"file_id": file_id, "path_dxf": str(dest_path)},
+            )
+            await session.commit()
+
+    return dest_path
