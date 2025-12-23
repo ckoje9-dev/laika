@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.db.src.session import get_session
 from packages.db.src import models as db_models
+from packages.queue import enqueue
 
 router = APIRouter(tags=["uploads"])
 
@@ -25,6 +26,7 @@ class UploadInitResponse(BaseModel):
     upload_path: str
     storage_path: str
     type: str
+    enqueued: bool
 
 
 def _infer_type(filename: str) -> str:
@@ -63,7 +65,24 @@ async def init_upload(payload: UploadInitRequest, session: AsyncSession = Depend
 
     # 업로드는 로컬 경로로 가정 (서명 URL이 없다면 파일 시스템 직접 업로드)
     upload_path = str(storage_path)
-    return UploadInitResponse(file_id=str(file_row.id), upload_path=upload_path, storage_path=str(storage_path), type=ftype)
+    # 변환 잡 enqueue (동기 루틴이므로 실패해도 요청 자체는 201 반환)
+    enqueued = False
+    try:
+        enqueue("apps.worker.src.jobs.dwg_to_dxf.run", str(storage_path), str(file_row.id))
+        enqueued = True
+    except Exception as e:
+        # 큐 장애는 로깅만 하고 반환
+        import logging
+
+        logging.getLogger(__name__).warning("enqueue 실패: %s", e)
+
+    return UploadInitResponse(
+        file_id=str(file_row.id),
+        upload_path=upload_path,
+        storage_path=str(storage_path),
+        type=ftype,
+        enqueued=enqueued,
+    )
 
 
 @router.get("/{file_id}/status")

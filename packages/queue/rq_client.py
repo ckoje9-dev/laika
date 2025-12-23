@@ -6,6 +6,9 @@ from typing import Any, Callable, Mapping
 
 import redis
 from rq import Queue, Worker
+from rq.job import Job
+from rq import enqueue_call
+import importlib
 
 
 def get_redis_connection() -> redis.Redis:
@@ -17,9 +20,13 @@ def get_queue(name: str = "default") -> Queue:
     return Queue(name, connection=get_redis_connection())
 
 
-def enqueue(job_func: Callable[..., Any], *args: Any, **kwargs: Any):
+def enqueue(job_path: str, *args: Any, **kwargs: Any) -> Job:
+    """job_path: 'module.submodule:function' 형태로 함수 경로 지정."""
+    module_path, func_name = job_path.rsplit(".", 1)
+    module = importlib.import_module(module_path)
+    func = getattr(module, func_name)
     q = get_queue()
-    return q.enqueue(job_func, *args, **kwargs)
+    return q.enqueue(func, *args, **kwargs)
 
 
 def start_worker(job_funcs: Mapping[str, Callable[..., Any]]):
