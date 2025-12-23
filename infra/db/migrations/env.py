@@ -1,17 +1,24 @@
 ﻿from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import create_engine, pool
+from packages.db.src.models import Base
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = None
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+target_metadata = Base.metadata
 
 
 def get_url() -> str:

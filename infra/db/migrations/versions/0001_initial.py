@@ -4,6 +4,7 @@ from __future__ import annotations
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from geoalchemy2 import Geometry
 
 revision = "0001_initial"
 down_revision = None
@@ -21,6 +22,7 @@ def upgrade() -> None:
         sa.Column("name", sa.Text(), nullable=False),
         sa.Column("address", sa.Text(), nullable=True),
         sa.Column("purpose", sa.Text(), nullable=True),
+        sa.Column("location_geom", Geometry(geometry_type="POINT", srid=4326), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
     )
 
@@ -73,8 +75,8 @@ def upgrade() -> None:
         sa.Column("file_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("files.id", ondelete="CASCADE"), nullable=False),
         sa.Column("type", sa.Text(), nullable=False),
         sa.Column("layer", sa.Text(), nullable=True),
-        sa.Column("geom", sa.types.UserDefinedType("geometry"), nullable=True),
-        sa.Column("bbox", sa.types.UserDefinedType("geometry"), nullable=True),
+        sa.Column("geom", Geometry(geometry_type="GEOMETRY", srid=0), nullable=True),
+        sa.Column("bbox", Geometry(geometry_type="GEOMETRY", srid=0), nullable=True),
         sa.Column("length", sa.Numeric(), nullable=True),
         sa.Column("area", sa.Numeric(), nullable=True),
         sa.Column("properties", postgresql.JSONB(), nullable=True),
@@ -95,7 +97,7 @@ def upgrade() -> None:
         sa.Column("kind", sa.Text(), nullable=False),
         sa.Column("confidence", sa.Numeric(), nullable=True),
         sa.Column("source_rule", sa.Text(), nullable=True),
-        sa.Column("geom", sa.types.UserDefinedType("geometry"), nullable=True),
+        sa.Column("geom", Geometry(geometry_type="GEOMETRY", srid=0), nullable=True),
         sa.Column("properties", postgresql.JSONB(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
     )
