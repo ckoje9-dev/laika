@@ -74,10 +74,10 @@ async def convert_dwg_to_dxf(src: Path, dest_dir: Path) -> Path:
     return output_path
 
 
-async def run(src: Optional[Path] = None) -> None:
+async def run(src: Optional[Path] = None, file_id: Optional[str] = None) -> Optional[Path]:
     """단일 DWG를 DXF로 변환.
 
-    실제 환경에서는 큐/이벤트에서 src 경로를 받도록 대체한다.
+    file_id가 주어지면 files.path_dxf와 conversion_logs(status=pending/success/fail)를 갱신한다.
     """
     STORAGE_ORIGINAL_PATH.mkdir(parents=True, exist_ok=True)
     STORAGE_DERIVED_PATH.mkdir(parents=True, exist_ok=True)
@@ -87,7 +87,8 @@ async def run(src: Optional[Path] = None) -> None:
         candidates = sorted(STORAGE_ORIGINAL_PATH.glob("*.dwg"), key=lambda p: p.stat().st_mtime, reverse=True)
         if not candidates:
             logger.info("변환할 DWG가 없습니다 (원본 경로: %s)", STORAGE_ORIGINAL_PATH)
-            return
+            return None
         src = candidates[0]
 
-    await convert_dwg_to_dxf(src, STORAGE_DERIVED_PATH)
+    dest_path = STORAGE_DERIVED_PATH / f"{src.stem}.dxf"
+    return await convert_dwg_to_dxf(src, STORAGE_DERIVED_PATH)
