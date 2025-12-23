@@ -7,6 +7,9 @@ from typing import Any, Iterable, Mapping
 
 from langchain.vectorstores.pgvector import PGVector
 from langchain.embeddings.base import Embeddings
+from sqlalchemy.exc import SQLAlchemyError
+
+from .config import get_embeddings, MissingConfig
 
 
 def _connection_string() -> str:
@@ -39,9 +42,12 @@ class VectorIndexer:
         )
 
     def upsert(self, docs: Iterable[DocumentPayload]) -> None:
-        texts = [d.text for d in docs]
+        docs_list = list(docs)
+        if not docs_list:
+            return
+        texts = [d.text for d in docs_list]
         metadatas = []
-        for d in docs:
+        for d in docs_list:
             meta = dict(d.metadata)
             meta.update(
                 {
@@ -52,4 +58,15 @@ class VectorIndexer:
                 }
             )
             metadatas.append(meta)
-        self.store.add_texts(texts=texts, metadatas=metadatas)
+        try:
+            self.store.add_texts(texts=texts, metadatas=metadatas)
+        except SQLAlchemyError as e:
+            raise RuntimeError(f"pgvector upsert 실패: {e}") from e
+
+
+def build_default_indexer(collection_name: str = "laika_rag") -> VectorIndexer:
+    try:
+        embeddings = get_embeddings()
+    except MissingConfig as e:
+        raise RuntimeError(str(e))
+    return VectorIndexer(embeddings, collection_name=collection_name)

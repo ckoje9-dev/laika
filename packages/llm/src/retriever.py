@@ -8,6 +8,8 @@ from langchain.vectorstores.pgvector import PGVector
 from langchain.schema import Document
 from langchain.embeddings.base import Embeddings
 
+from .config import get_embeddings, MissingConfig
+
 
 def _connection_string() -> str:
     url = os.getenv("VECTOR_STORE_URL", "")
@@ -34,3 +36,17 @@ def build_retriever(
         filter_meta["kind"] = {"$in": list(kind_filter)}
     retriever = store.as_retriever(search_kwargs={"k": k, "filter": filter_meta})
     return retriever
+
+
+def build_default_retriever(project_id: str, collection_name: str = "laika_rag", *, k: int = 5, kind_filter: Sequence[str] | None = None):
+    try:
+        embeddings = get_embeddings()
+    except MissingConfig as e:
+        raise RuntimeError(str(e))
+    return build_retriever(
+        embeddings=embeddings,
+        collection_name=collection_name,
+        project_id=project_id,
+        k=k,
+        kind_filter=kind_filter,
+    )
