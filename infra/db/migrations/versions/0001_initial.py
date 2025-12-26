@@ -33,7 +33,7 @@ def upgrade() -> None:
         sa.Column("label", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
     )
-    op.create_index("idx_versions_project_id", "versions", ["project_id"])
+    op.create_index("idx_versions_project_id", "versions", ["project_id"], if_not_exists=True)
 
     op.create_table(
         "files",
@@ -50,7 +50,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
     )
     op.create_check_constraint("ck_files_type", "files", "type in ('dwg','dxf','pdf','img','doc')")
-    op.create_index("idx_files_version_id", "files", ["version_id"])
+    op.create_index("idx_files_version_id", "files", ["version_id"], if_not_exists=True)
 
     op.create_table(
         "conversion_logs",
@@ -67,7 +67,7 @@ def upgrade() -> None:
         sa.Column("entity_count", sa.Integer(), nullable=True),
     )
     op.create_check_constraint("ck_conversion_logs_status", "conversion_logs", "status in ('pending','success','failed')")
-    op.create_index("idx_conversion_logs_file_id", "conversion_logs", ["file_id"])
+    op.create_index("idx_conversion_logs_file_id", "conversion_logs", ["file_id"], if_not_exists=True)
 
     op.create_table(
         "dxf_entities_raw",
@@ -87,8 +87,8 @@ def upgrade() -> None:
         "dxf_entities_raw",
         "type in ('LINE','POLYLINE','LWPOLYLINE','CIRCLE','ARC','TEXT','MTEXT','HATCH','BLOCK','INSERT')",
     )
-    op.create_index("idx_dxf_entities_raw_file_id", "dxf_entities_raw", ["file_id"])
-    op.create_index("idx_dxf_entities_raw_geom", "dxf_entities_raw", ["geom"], postgresql_using="gist")
+    op.create_index("idx_dxf_entities_raw_file_id", "dxf_entities_raw", ["file_id"], if_not_exists=True)
+    op.create_index("idx_dxf_entities_raw_geom", "dxf_entities_raw", ["geom"], postgresql_using="gist", if_not_exists=True)
 
     op.create_table(
         "semantic_objects",
@@ -106,8 +106,8 @@ def upgrade() -> None:
         "semantic_objects",
         "kind in ('space','wall','door','window','core','stairs','elevator')",
     )
-    op.create_index("idx_semantic_objects_file_id", "semantic_objects", ["file_id"])
-    op.create_index("idx_semantic_objects_geom", "semantic_objects", ["geom"], postgresql_using="gist")
+    op.create_index("idx_semantic_objects_file_id", "semantic_objects", ["file_id"], if_not_exists=True)
+    op.create_index("idx_semantic_objects_geom", "semantic_objects", ["geom"], postgresql_using="gist", if_not_exists=True)
 
     op.create_table(
         "project_stats",
@@ -129,7 +129,7 @@ def upgrade() -> None:
         sa.Column("confidence", sa.Numeric(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
     )
-    op.create_index("idx_qa_history_project_id", "qa_history", ["project_id"])
+    op.create_index("idx_qa_history_project_id", "qa_history", ["project_id"], if_not_exists=True)
 
 
 def downgrade() -> None:
