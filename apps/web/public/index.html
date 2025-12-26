@@ -106,11 +106,11 @@
     </div>
   </div>
 
-  <div class="card" style="margin-top:16px;">
-    <h2>업로드/작업 목록</h2>
-    <div class="note">DWG 파일을 업로드하면 여기에서 변환/파싱을 실행하고 상태를 확인합니다.</div>
-    <div id="fileList"></div>
-  </div>
+    <div class="card" style="margin-top:16px;">
+      <h2>업로드/작업 목록</h2>
+      <div class="note">DWG를 업로드하면 자동 버전(v1,v2,...)이 생성되고, 변환 완료 후 DXF 다운로드 및 파싱을 실행할 수 있습니다.</div>
+      <div id="fileList"></div>
+    </div>
 
   <div class="card" style="margin-top:16px;">
     <h2>로그</h2>
@@ -126,16 +126,24 @@
     const fileInput = $("fileInput");
     const versionLabelDisplay = $("versionLabelDisplay");
     const fileList = $("fileList");
-    const projectListEl = document.createElement("div");
-    projectListEl.className = "card";
-    projectListEl.style.marginTop = "16px";
-    projectListEl.innerHTML = `<h2>프로젝트 목록</h2><div id="projectList"></div>`;
-    document.querySelector("body").insertBefore(projectListEl, document.querySelector(".card:nth-of-type(3)"));
+    // 프로젝트 목록 패널 삽입 (앵커가 없으면 body 끝에 붙임)
+    (function insertProjectList() {
+      const projectListEl = document.createElement("div");
+      projectListEl.className = "card";
+      projectListEl.style.marginTop = "16px";
+      projectListEl.innerHTML = `<h2>프로젝트 목록</h2><div id="projectList"></div>`;
+      const anchor = document.querySelector(".card:nth-of-type(3)") || document.body.lastElementChild;
+      if (anchor && anchor.parentNode) {
+        anchor.parentNode.insertBefore(projectListEl, anchor);
+      } else {
+        document.body.appendChild(projectListEl);
+      }
+    })();
 
     const state = {
       projects: [],
       selectedProjectId: null,
-      rows: [], // {projectId, fileId, filename, versionLabel, uploadPath, status, message, progress}
+      rows: [], // {projectId, fileId, filename, versionLabel, uploadPath, status, message, progress, pathDxf}
       versionCounters: {}, // projectId -> latest number
     };
 
@@ -164,7 +172,7 @@
 
     async function fetchProjects() {
       try {
-        const projects = await api("/projects");
+        const projects = await api("/projects/");
         state.projects = projects;
         if (!state.selectedProjectId && projects.length > 0) {
           state.selectedProjectId = projects[0].id;
@@ -180,8 +188,8 @@
     async function fetchProjectDetails(projectId) {
       if (!projectId) return;
       try {
-        const versions = await api(`/projects/${projectId}/versions`);
-        const files = await api(`/projects/${projectId}/files`);
+        const versions = await api(`/projects/${projectId}/versions/`);
+        const files = await api(`/projects/${projectId}/files/`);
         const versionNum = versions.length;
         state.versionCounters[projectId] = versionNum;
         versionLabelDisplay.textContent = `v${versionNum + 1}`;
@@ -195,9 +203,10 @@
             filename: f.path_original ? f.path_original.split("/").pop() : f.id,
             versionLabel: f.version_label || "-",
             uploadPath: f.path_original,
-            status: "uploaded",
+            pathDxf: f.path_dxf,
+            status: f.path_dxf ? "success" : "uploaded",
             message: "",
-            progress: 0,
+            progress: f.path_dxf ? 100 : 0,
           });
         });
       } catch (e) {
@@ -246,6 +255,13 @@
         const card = document.createElement("div");
         card.className = "card";
         card.style.marginBottom = "8px";
+
+        const downloadLink = row.pathDxf
+          ? `<a href="${apiBaseInput.value.replace(/\/$/, '')}/uploads/${row.fileId}/download" target="_blank" class="linkish">DXF 다운로드</a>`
+          : '<span class="note">DXF 미생성</span>';
+
+        const parseDisabled = row.status !== "success" || !row.pathDxf;
+
         card.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
             <div>
@@ -254,13 +270,13 @@
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
               <button data-action="convert" data-idx="${idx}" ${row.status === "converting" ? "disabled" : ""}>변환</button>
-              <button data-action="parse" data-idx="${idx}" ${row.status === "parsing" ? "disabled" : ""}>파싱</button>
-              <button data-action="poll" data-idx="${idx}">새로고침</button>
+              <button data-action="parse" data-idx="${idx}" ${parseDisabled ? "disabled" : ""}>파싱</button>
             </div>
           </div>
           <div style="margin-top:8px;">
             <div class="note">상태: <span class="pill ${row.status}">${row.status}</span> ${row.message ? "(" + row.message + ")" : ""}</div>
             <div class="note">업로드 경로: ${row.uploadPath || "-"}</div>
+            <div class="note">DXF: ${downloadLink}</div>
           </div>
           <div class="progress" style="margin-top:8px; height:8px; background:#1f2937; border-radius:6px; overflow:hidden;">
             <div style="height:100%; width:${row.progress || 0}%; background:${row.status === "failed" ? "var(--error)" : "var(--accent)"}; transition: width 0.3s;"></div>
@@ -278,7 +294,6 @@
           const globalIdx = state.rows.findIndex((r) => r.fileId === row.fileId);
           if (action === "convert") startConvert(globalIdx);
           if (action === "parse") startParse(globalIdx);
-          if (action === "poll") pollStatus(globalIdx);
         };
       });
     }
@@ -286,7 +301,7 @@
     $("createProject").onclick = async () => {
       try {
         const payload = { name: projectName.value || "demo project" };
-        const data = await api("/projects", {
+        const data = await api("/projects/", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -308,7 +323,7 @@
         versionLabelDisplay.textContent = versionLabel;
 
         // 버전 생성
-        const version = await api(`/projects/${state.selectedProjectId}/versions`, {
+        const version = await api(`/projects/${state.selectedProjectId}/versions/`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ label: versionLabel }),
@@ -362,6 +377,10 @@
     async function startParse(idx) {
       const row = state.rows[idx];
       if (!row?.fileId) return;
+      if (row.status !== "success" || !row.pathDxf) {
+        log("DXF 변환이 완료된 후 파싱할 수 있습니다.", "error");
+        return;
+      }
       row.status = "parsing";
       row.progress = 20;
       renderFiles();
@@ -384,6 +403,7 @@
         const data = await api(`/uploads/${row.fileId}/status`);
         row.status = data.status;
         row.message = data.message || "";
+        row.pathDxf = data.path_dxf || row.pathDxf;
         if (data.status === "pending") {
           row.progress = Math.min((row.progress || 10) + 10, 90);
           renderFiles();

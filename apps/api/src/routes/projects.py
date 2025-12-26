@@ -51,3 +51,38 @@ async def create_version(project_id: str, payload: schema.VersionCreate | None =
     await session.commit()
     await session.refresh(version)
     return version
+
+
+@router.get("/{project_id}/versions", response_model=list[schema.Version])
+async def list_versions(project_id: str, session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(db_models.Version).where(db_models.Version.project_id == project_id).order_by(db_models.Version.created_at))
+    return result.scalars().all()
+
+
+class FileWithVersion(schema.File):
+    version_label: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/{project_id}/files", response_model=list[FileWithVersion])
+async def list_files(project_id: str, session: AsyncSession = Depends(get_session)):
+    # 프로젝트 존재 확인
+    exists = await session.execute(select(db_models.Project.id).where(db_models.Project.id == project_id))
+    if exists.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="project not found")
+
+    stmt = (
+        select(db_models.File, db_models.Version.label)
+        .join(db_models.Version, db_models.File.version_id == db_models.Version.id)
+        .where(db_models.Version.project_id == project_id)
+        .order_by(db_models.File.created_at)
+    )
+    result = await session.execute(stmt)
+    rows = []
+    for file_row, vlabel in result:
+        item = FileWithVersion.from_orm(file_row)
+        item.version_label = vlabel
+        rows.append(item)
+    return rows

@@ -6,8 +6,10 @@
 - RAG 기반 질의응답 엔드포인트
 """
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 try:
+    # apps.api.src.routes.__init__에서 router 객체를 export함
     from apps.api.src.routes import projects, uploads, queries  # type: ignore
 except ModuleNotFoundError:
     projects = uploads = queries = None  # type: ignore
@@ -16,12 +18,22 @@ except ModuleNotFoundError:
 def create_app() -> FastAPI:
     app = FastAPI(title="laika API", version="0.1.0")
 
-    if projects and hasattr(projects, "router"):
-        app.include_router(projects.router, prefix="/projects")
-    if uploads and hasattr(uploads, "router"):
-        app.include_router(uploads.router, prefix="/uploads")
-    if queries and hasattr(queries, "router"):
-        app.include_router(queries.router, prefix="/queries")
+    # 개발/도메인 테스트용 CORS 허용 (필요 시 환경변수 기반으로 조정)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # projects/uploads/queries는 APIRouter 객체임
+    if projects:
+        app.include_router(projects, prefix="/projects")
+    if uploads:
+        app.include_router(uploads, prefix="/uploads")
+    if queries:
+        app.include_router(queries, prefix="/queries")
 
     @app.get("/health", tags=["health"])
     def health():

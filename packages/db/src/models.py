@@ -17,7 +17,7 @@ SRID_LOCAL_CAD = 0  # CAD 로컬 좌표; 혼합 금지
 class Project(Base):
     __tablename__ = "projects"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=sa.text("uuid_generate_v4()"))
     name: Mapped[str] = mapped_column(Text, nullable=False)
     address: Mapped[str | None] = mapped_column(Text)
     purpose: Mapped[str | None] = mapped_column(Text)
@@ -28,7 +28,7 @@ class Project(Base):
 class Version(Base):
     __tablename__ = "versions"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=sa.text("uuid_generate_v4()"))
     project_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     label: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=sa.text("now()"))
@@ -37,7 +37,7 @@ class Version(Base):
 class File(Base):
     __tablename__ = "files"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=sa.text("uuid_generate_v4()"))
     version_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("versions.id", ondelete="CASCADE"), nullable=False)
     type: Mapped[str] = mapped_column(Text, nullable=False)
     path_original: Mapped[str | None] = mapped_column(Text)

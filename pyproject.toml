@@ -19,6 +19,7 @@ dependencies = [
   "geoalchemy2>=0.14",
   "redis>=5.0",
   "rq>=1.15",
+  "python-multipart>=0.0.7",
   "python-dotenv>=1.0",
 ]
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Optional
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -13,26 +14,27 @@ class ProjectCreate(BaseModel):
 
 
 class Project(ProjectCreate):
-    id: str
+    id: UUID
 
     class Config:
         from_attributes = True
 
 
 class VersionCreate(BaseModel):
-    project_id: str
+    project_id: Optional[UUID] = None
     label: Optional[str] = None
 
 
 class Version(VersionCreate):
-    id: str
+    id: UUID
+    project_id: UUID
 
     class Config:
         from_attributes = True
 
 
 class FileCreate(BaseModel):
-    version_id: str
+    version_id: Optional[UUID] = None
     type: str
     path_original: Optional[str] = None
     path_dxf: Optional[str] = None
@@ -40,7 +42,8 @@ class FileCreate(BaseModel):
 
 
 class File(FileCreate):
-    id: str
+    id: UUID
+    version_id: UUID
 
     class Config:
         from_attributes = True

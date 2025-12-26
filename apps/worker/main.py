@@ -26,10 +26,10 @@ logger = logging.getLogger("worker")
 
 
 JOB_MAP = {
-    "dwg_to_dxf": dwg_to_dxf.run,
-    "dxf_parse": dxf_parse.run,
-    "semantic_build": semantic_build.run,
-    "index_project": index_project.run,
+    "dwg_to_dxf": dwg_to_dxf,
+    "dxf_parse": dxf_parse,
+    "semantic_build": semantic_build,
+    "index_project": index_project,
 }
 
 

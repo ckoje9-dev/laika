@@ -7,7 +7,6 @@ from typing import Any, Callable, Mapping
 import redis
 from rq import Queue, Worker
 from rq.job import Job
-from rq import enqueue_call
 import importlib
 
 
