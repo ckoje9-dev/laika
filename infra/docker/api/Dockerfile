@@ -10,6 +10,7 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       build-essential \
       docker.io \
+      docker-cli \
       postgresql-client && \
     rm -rf /var/lib/apt/lists/*
 
