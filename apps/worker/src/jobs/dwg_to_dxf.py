@@ -15,6 +15,7 @@ PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[4
 ODA_CONVERTER_PATH = Path(os.getenv("ODA_CONVERTER_PATH", "tools/oda/ODAFileConverter"))
 ODA_DOCKER_IMAGE = os.getenv("ODA_DOCKER_IMAGE")
 ODA_CONTAINER_WORKDIR = os.getenv("ODA_CONTAINER_WORKDIR", "/data")
+ODA_CONVERTER_PATH_IN_IMAGE = os.getenv("ODA_CONVERTER_PATH_IN_IMAGE", "/usr/bin/ODAFileConverter")
 STORAGE_ORIGINAL_PATH = Path(os.getenv("STORAGE_ORIGINAL_PATH", "storage/original"))
 STORAGE_DERIVED_PATH = Path(os.getenv("STORAGE_DERIVED_PATH", "storage/derived"))
 
@@ -23,31 +24,34 @@ async def convert_dwg_to_dxf(src: Path, dest_dir: Path) -> Path:
     dest_dir.mkdir(parents=True, exist_ok=True)
     output_path = dest_dir / f"{src.stem}.dxf"
 
-    # 컨테이너 실행 경로 대비를 위해 project root 상대 경로로 변환
+    # 컨테이너 실행 경로 대비를 위해 절대 경로 확보
     src_abs = src.resolve()
     dest_abs = dest_dir.resolve()
 
     if ODA_DOCKER_IMAGE:
-        project_root = PROJECT_ROOT.resolve()
-        try:
-            src_rel = src_abs.relative_to(project_root)
-            dest_rel = dest_abs.relative_to(project_root)
-        except ValueError as exc:
-            raise RuntimeError("src/dest는 PROJECT_ROOT 하위여야 컨테이너 실행이 가능합니다.") from exc
+        storage_root = STORAGE_ORIGINAL_PATH.parents[1] if len(STORAGE_ORIGINAL_PATH.parents) > 1 else STORAGE_ORIGINAL_PATH.parent
+        storage_root = storage_root.resolve()
+        # src/dest가 storage_root 하위가 아니면 storage_root를 src의 부모로 사용
+        if storage_root not in src_abs.parents:
+            storage_root = src_abs.parent
+        container_root = Path(ODA_CONTAINER_WORKDIR)
 
-        converter_in_container = Path(ODA_CONTAINER_WORKDIR) / ODA_CONVERTER_PATH
+        src_rel = src_abs.relative_to(storage_root)
+        dest_rel = dest_abs.relative_to(storage_root)
+
+        converter_in_container = ODA_CONVERTER_PATH_IN_IMAGE
         cmd = [
             "docker",
             "run",
             "--rm",
             "-v",
-            f"{project_root}:{ODA_CONTAINER_WORKDIR}",
+            f"{storage_root}:{container_root}",
             "-w",
-            str(ODA_CONTAINER_WORKDIR),
+            str(container_root),
             ODA_DOCKER_IMAGE,
             str(converter_in_container),
-            str(Path(ODA_CONTAINER_WORKDIR) / src_rel),
-            str(Path(ODA_CONTAINER_WORKDIR) / dest_rel),
+            str(container_root / src_rel),
+            str(container_root / dest_rel),
             "ACAD2018",  # 출력 DWG/DXF 버전
             "DXF",       # 출력 포맷
             "1",         # 재귀 처리 (1=켜기)
@@ -83,6 +87,9 @@ async def run(src: Optional[Path] = None, file_id: Optional[str] = None) -> Opti
 
     file_id가 주어지면 files.path_dxf와 conversion_logs(status=pending/success/fail)를 갱신한다.
     """
+    if isinstance(src, str):
+        src = Path(src)
+
     STORAGE_ORIGINAL_PATH.mkdir(parents=True, exist_ok=True)
     STORAGE_DERIVED_PATH.mkdir(parents=True, exist_ok=True)
 
