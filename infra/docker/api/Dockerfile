@@ -7,7 +7,10 @@ ENV PIP_NO_CACHE_DIR=1 \
     PYTHONUNBUFFERED=1
 
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      build-essential \
+      docker.io \
+      postgresql-client && \
     rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md ./

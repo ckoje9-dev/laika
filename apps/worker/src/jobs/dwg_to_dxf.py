@@ -4,6 +4,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Optional
+import shutil
 
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -16,6 +17,7 @@ ODA_CONVERTER_PATH = Path(os.getenv("ODA_CONVERTER_PATH", "tools/oda/ODAFileConv
 ODA_DOCKER_IMAGE = os.getenv("ODA_DOCKER_IMAGE")
 ODA_CONTAINER_WORKDIR = os.getenv("ODA_CONTAINER_WORKDIR", "/data")
 ODA_CONVERTER_PATH_IN_IMAGE = os.getenv("ODA_CONVERTER_PATH_IN_IMAGE", "/usr/bin/ODAFileConverter")
+ODA_VOLUME_NAME = os.getenv("ODA_VOLUME_NAME", "storage_data")
 STORAGE_ORIGINAL_PATH = Path(os.getenv("STORAGE_ORIGINAL_PATH", "storage/original"))
 STORAGE_DERIVED_PATH = Path(os.getenv("STORAGE_DERIVED_PATH", "storage/derived"))
 
@@ -29,15 +31,16 @@ async def convert_dwg_to_dxf(src: Path, dest_dir: Path) -> Path:
     dest_abs = dest_dir.resolve()
 
     if ODA_DOCKER_IMAGE:
-        storage_root = STORAGE_ORIGINAL_PATH.parents[1] if len(STORAGE_ORIGINAL_PATH.parents) > 1 else STORAGE_ORIGINAL_PATH.parent
-        storage_root = storage_root.resolve()
-        # src/dest가 storage_root 하위가 아니면 storage_root를 src의 부모로 사용
-        if storage_root not in src_abs.parents:
-            storage_root = src_abs.parent
-        container_root = Path(ODA_CONTAINER_WORKDIR)
+        if not shutil.which("docker"):
+            raise RuntimeError("docker CLI가 없습니다. worker 컨테이너에 docker-cli를 설치하고 /var/run/docker.sock을 마운트하세요.")
 
-        src_rel = src_abs.relative_to(storage_root)
-        dest_rel = dest_abs.relative_to(storage_root)
+        # 볼륨 이름을 바로 마운트 (compose: storage_data)
+        container_root = Path(ODA_CONTAINER_WORKDIR)
+        try:
+            src_rel = src_abs.relative_to(container_root)
+            dest_rel = dest_abs.relative_to(container_root)
+        except Exception as exc:
+            raise RuntimeError(f"경로 매핑 실패: src={src_abs}, dest={dest_abs}, root={container_root}") from exc
 
         converter_in_container = ODA_CONVERTER_PATH_IN_IMAGE
         cmd = [
@@ -45,7 +48,7 @@ async def convert_dwg_to_dxf(src: Path, dest_dir: Path) -> Path:
             "run",
             "--rm",
             "-v",
-            f"{storage_root}:{container_root}",
+            f"{ODA_VOLUME_NAME}:{container_root}",
             "-w",
             str(container_root),
             ODA_DOCKER_IMAGE,
