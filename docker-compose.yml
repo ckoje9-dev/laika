@@ -30,7 +30,6 @@ services:
       dockerfile: infra/docker/oda/Dockerfile
     image: laika/oda-converter:latest
     profiles: ["dev"]
-    entrypoint: ["/usr/bin/ODAFileConverter"]
 
   api:
     build:
@@ -97,12 +96,6 @@ services:
       sh -c "
         export PGPASSWORD=$${PGPASSWORD:-laika};
         until psql -h db -U laika -d laika -c 'select 1' >/dev/null 2>&1; do echo 'waiting for db'; sleep 1; done;
-        cd /app/infra/db &&
-        PYTHONPATH=/app alembic upgrade head || (
-          echo 'alembic upgrade failed, dropping alembic_version and retrying' ;
-          psql -h db -U laika -d laika -c 'drop table if exists alembic_version' ;
-          PYTHONPATH=/app alembic upgrade head
-        ) &&
         cd /app &&
         python -m apps.worker.main listen rq"
 

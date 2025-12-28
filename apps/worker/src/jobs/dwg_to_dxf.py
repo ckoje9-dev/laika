@@ -42,7 +42,6 @@ async def convert_dwg_to_dxf(src: Path, dest_dir: Path) -> Path:
         except Exception as exc:
             raise RuntimeError(f"경로 매핑 실패: src={src_abs}, dest={dest_abs}, root={container_root}") from exc
 
-        converter_in_container = ODA_CONVERTER_PATH_IN_IMAGE
         cmd = [
             "docker",
             "run",
@@ -52,7 +51,6 @@ async def convert_dwg_to_dxf(src: Path, dest_dir: Path) -> Path:
             "-w",
             str(container_root),
             ODA_DOCKER_IMAGE,
-            str(converter_in_container),
             str(container_root / src_rel),
             str(container_root / dest_rel),
             "ACAD2018",  # 출력 DWG/DXF 버전
@@ -71,12 +69,18 @@ async def convert_dwg_to_dxf(src: Path, dest_dir: Path) -> Path:
             "1",         # 로그 레벨 (1=기본)
         ]
 
+    logger.info("ODA 변환 실행: cmd=%s", " ".join(str(c) for c in cmd))
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
-    stdout, _ = await proc.communicate()
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise RuntimeError(f"ODA 변환 시간 초과: {src}")
     if proc.returncode != 0:
         logger.error("ODA 변환 실패 rc=%s output=%s", proc.returncode, stdout.decode(errors="ignore"))
         raise RuntimeError(f"ODA 변환 실패: {src}")
