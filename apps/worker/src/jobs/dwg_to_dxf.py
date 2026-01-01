@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[4]))
 ODA_CONVERTER_PATH = Path(os.getenv("ODA_CONVERTER_PATH", "tools/oda/ODAFileConverter"))
 ODA_DOCKER_IMAGE = os.getenv("ODA_DOCKER_IMAGE")
-ODA_CONTAINER_WORKDIR = os.getenv("ODA_CONTAINER_WORKDIR", "/data")
+ODA_CONTAINER_WORKDIR = os.getenv("ODA_CONTAINER_WORKDIR", "/data/storage")
 ODA_CONVERTER_PATH_IN_IMAGE = os.getenv("ODA_CONVERTER_PATH_IN_IMAGE", "/usr/bin/ODAFileConverter")
-ODA_VOLUME_NAME = os.getenv("ODA_VOLUME_NAME", "storage_data")
+ODA_VOLUME_NAME = os.getenv("ODA_VOLUME_NAME", "laika_storage_data")
 STORAGE_ORIGINAL_PATH = Path(os.getenv("STORAGE_ORIGINAL_PATH", "storage/original"))
 STORAGE_DERIVED_PATH = Path(os.getenv("STORAGE_DERIVED_PATH", "storage/derived"))
 
@@ -29,6 +29,7 @@ async def convert_dwg_to_dxf(src: Path, dest_dir: Path) -> Path:
     # 컨테이너 실행 경로 대비를 위해 절대 경로 확보
     src_abs = src.resolve()
     dest_abs = dest_dir.resolve()
+    input_dir = src_abs.parent  # ODAFileConverter는 디렉터리 단위로 변환
 
     if ODA_DOCKER_IMAGE:
         if not shutil.which("docker"):
@@ -39,6 +40,7 @@ async def convert_dwg_to_dxf(src: Path, dest_dir: Path) -> Path:
         try:
             src_rel = src_abs.relative_to(container_root)
             dest_rel = dest_abs.relative_to(container_root)
+            input_dir_rel = input_dir.relative_to(container_root)
         except Exception as exc:
             raise RuntimeError(f"경로 매핑 실패: src={src_abs}, dest={dest_abs}, root={container_root}") from exc
 
@@ -51,7 +53,8 @@ async def convert_dwg_to_dxf(src: Path, dest_dir: Path) -> Path:
             "-w",
             str(container_root),
             ODA_DOCKER_IMAGE,
-            str(container_root / src_rel),
+            # ODAFileConverter는 디렉터리 기준 변환, src 파일이 속한 폴더 전체를 입력으로 전달
+            str(container_root / input_dir_rel),
             str(container_root / dest_rel),
             "ACAD2018",  # 출력 DWG/DXF 버전
             "DXF",       # 출력 포맷
@@ -81,9 +84,14 @@ async def convert_dwg_to_dxf(src: Path, dest_dir: Path) -> Path:
         proc.kill()
         await proc.wait()
         raise RuntimeError(f"ODA 변환 시간 초과: {src}")
+    stdout_text = stdout.decode(errors="ignore")
     if proc.returncode != 0:
-        logger.error("ODA 변환 실패 rc=%s output=%s", proc.returncode, stdout.decode(errors="ignore"))
+        logger.error("ODA 변환 실패 rc=%s output=%s", proc.returncode, stdout_text)
         raise RuntimeError(f"ODA 변환 실패: {src}")
+
+    if not output_path.exists():
+        logger.error("ODA 변환 완료했지만 출력 DXF가 없습니다. stdout=%s", stdout_text)
+        raise RuntimeError(f"ODA 변환 결과 파일이 없습니다: {output_path}")
 
     logger.info("ODA 변환 성공: %s -> %s", src, output_path)
     return output_path
@@ -143,15 +151,20 @@ async def run(src: Optional[Path] = None, file_id: Optional[str] = None) -> Opti
 
     if file_id:
         async with SessionLocal() as session:
+            params = {"file_id": file_id, "path_dxf": str(dest_path)}
+            # psycopg3는 한 번의 prepared statement에 여러 SQL을 넣을 수 없어 나눠서 실행
+            await session.execute(
+                text("update files set path_dxf = :path_dxf where id = :file_id"),
+                params,
+            )
             await session.execute(
                 text(
                     """
-                    update files set path_dxf = :path_dxf where id = :file_id;
                     insert into conversion_logs (file_id, status, started_at, finished_at)
-                    values (:file_id, 'success', now(), now());
+                    values (:file_id, 'success', now(), now())
                     """
                 ),
-                {"file_id": file_id, "path_dxf": str(dest_path)},
+                params,
             )
             await session.commit()
 

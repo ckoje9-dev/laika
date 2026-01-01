@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     image: postgis/postgis:15-3.3
@@ -83,6 +81,7 @@ services:
       STORAGE_ORIGINAL_PATH: /data/storage/original
       STORAGE_DERIVED_PATH: /data/storage/derived
       PROJECT_ROOT: /app
+      ODA_CONTAINER_WORKDIR: /data/storage
     volumes:
       - .:/app
       - storage_data:/data/storage

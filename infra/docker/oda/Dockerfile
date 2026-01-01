@@ -17,7 +17,7 @@ RUN apt-get update && \
       libopengl0 \
       libegl1 \
       qt6-base-dev \
-      libjpeg62-turbo \
+      libjpeg-turbo8 \
       libtiff5 \
       libxcursor1 \
       xvfb \
@@ -50,5 +50,14 @@ RUN apt-get update && \
 # 런타임 디렉토리 (xvfb/xcb 경고 방지)
 ENV XDG_RUNTIME_DIR=/tmp/runtime-root
 
-# xvfb-run으로 헤드리스 실행
-ENTRYPOINT ["/usr/bin/xvfb-run", "--auto-servernum", "--server-args=-screen 0 1024x768x24", "/usr/bin/ODAFileConverter"]
+# Xvfb 수동 구동 후 ODAFileConverter 실행 스크립트
+RUN cat >/usr/local/bin/oda-entrypoint.sh <<'EOF' \
+ && chmod +x /usr/local/bin/oda-entrypoint.sh
+#!/bin/sh
+set -e
+Xvfb :99 -screen 0 1024x768x24 -nolisten tcp -auth /tmp/xvfb-run.Xauthority &
+export DISPLAY=:99
+exec /usr/bin/ODAFileConverter "$@"
+EOF
+
+ENTRYPOINT ["/usr/local/bin/oda-entrypoint.sh"]
