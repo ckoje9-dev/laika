@@ -77,6 +77,12 @@
     .pill.success { background: rgba(52,211,153,0.15); color: var(--success); }
     .pill.error { background: rgba(248,113,113,0.15); color: var(--error); }
     .pill.pending { background: rgba(56,189,248,0.15); color: var(--accent); }
+    .chip { display: inline-block; padding: 4px 8px; border-radius: 999px; background: rgba(56,189,248,0.12); color: var(--text); margin: 2px; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+    th, td { border: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
+    th { background: #111827; position: sticky; top: 0; z-index: 1; }
+    .table-wrap { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+    .code-inline { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; background: #0b1223; padding: 4px 6px; border-radius: 6px; display: inline-block; max-width: 360px; white-space: pre-wrap; }
   </style>
 </head>
 <body>
@@ -113,6 +119,11 @@
     </div>
 
   <div class="card" style="margin-top:16px;">
+    <h2>파싱 결과 미리보기</h2>
+    <div id="parsedResult" class="note">파일을 선택하고 "파싱 결과" 버튼을 눌러 확인하세요.</div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
     <h2>로그</h2>
     <div id="log" class="log"></div>
   </div>
@@ -145,6 +156,7 @@
       selectedProjectId: null,
       rows: [], // {projectId, fileId, filename, versionLabel, uploadPath, status, message, progress, pathDxf}
       versionCounters: {}, // projectId -> latest number
+      currentParsed: null, // {fileId, metadata, counts, entities, total, meta_path}
     };
 
     function log(line, type = "info") {
@@ -193,6 +205,8 @@
         const versionNum = versions.length;
         state.versionCounters[projectId] = versionNum;
         versionLabelDisplay.textContent = `v${versionNum + 1}`;
+        state.currentParsed = null;
+        renderParsed();
 
         // 파일 rows 갱신: 해당 프로젝트 것만 교체
         state.rows = state.rows.filter((r) => r.projectId !== projectId);
@@ -271,6 +285,7 @@
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
               <button data-action="convert" data-idx="${idx}" ${row.status === "converting" ? "disabled" : ""}>변환</button>
               <button data-action="parse" data-idx="${idx}" ${parseDisabled ? "disabled" : ""}>파싱</button>
+              <button data-action="preview" data-idx="${idx}" ${row.pathDxf ? "" : "disabled"}>파싱 결과</button>
             </div>
           </div>
           <div style="margin-top:8px;">
@@ -294,6 +309,7 @@
           const globalIdx = state.rows.findIndex((r) => r.fileId === row.fileId);
           if (action === "convert") startConvert(globalIdx);
           if (action === "parse") startParse(globalIdx);
+          if (action === "preview") viewParsed(globalIdx);
         };
       });
     }
@@ -420,6 +436,127 @@
       } catch (e) {
         log(`상태 조회 실패: ${e.message}`, "error");
       }
+    }
+
+    async function viewParsed(idx) {
+      const row = state.rows[idx];
+      if (!row?.fileId) return;
+      try {
+        const data = await api(`/uploads/${row.fileId}/parsed`);
+        state.currentParsed = { ...data, filename: row.filename };
+        renderParsed();
+        log(`파싱 결과 조회: ${row.filename}`, "info");
+      } catch (e) {
+        log(`파싱 결과 조회 실패: ${e.message}`, "error");
+      }
+    }
+
+    function renderParsed() {
+      const box = $("parsedResult");
+      if (!box) return;
+      const data = state.currentParsed;
+      if (!data) {
+        box.innerHTML = '<div class="note">파일을 선택하고 "파싱 결과"를 눌러주세요.</div>';
+        return;
+      }
+
+      const documentMeta = (data.metadata || []).find((m) => m.section === "document");
+      const headerMeta = (data.metadata || []).find((m) => m.section === "header");
+      const tablesMeta = (data.metadata || []).find((m) => m.section === "tables");
+      const layoutsMeta = (data.metadata || []).find((m) => m.section === "layouts");
+
+      const renderKeyValueTable = (title, obj) => {
+        if (!obj) return `<div class="note">${title}: 데이터 없음</div>`;
+        const rows = Object.entries(obj)
+          .filter(([k]) => k !== "section")
+          .map(([k, v]) => `<tr><th>${k}</th><td><div class="code-inline">${JSON.stringify(v, null, 2)}</div></td></tr>`)
+          .join("");
+        return `
+          <h3 style="margin-top:12px;">${title}</h3>
+          <div class="table-wrap">
+            <table><tbody>${rows}</tbody></table>
+          </div>
+        `;
+      };
+
+      const renderListTable = (title, items = [], columns = []) => {
+        if (!items || items.length === 0) return `<div class="note">${title}: 데이터 없음</div>`;
+        const header = columns.map((c) => `<th>${c}</th>`).join("");
+        const rows = items
+          .map((item) => `<tr>${columns.map((c) => `<td>${JSON.stringify(item?.[c] ?? "-", null, 2)}</td>`).join("")}</tr>`)
+          .join("");
+        return `
+          <h3 style="margin-top:12px;">${title}</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>${header}</tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        `;
+      };
+
+      const counts = data.counts || {};
+      const countChips = Object.keys(counts).length
+        ? Object.entries(counts)
+            .map(([k, v]) => `<span class="chip">${k}: ${v}</span>`)
+            .join("")
+        : '<div class="note">엔티티가 없습니다.</div>';
+
+      const entities = (data.entities || [])
+        .map(
+          (e) => `
+            <tr>
+              <td>${e.id}</td>
+              <td>${e.type}</td>
+              <td>${e.layer || "-"}</td>
+              <td>${e.length ?? "-"}</td>
+              <td>${e.area ?? "-"}</td>
+              <td><div class="code-inline">${JSON.stringify(e.properties || {}, null, 2)}</div></td>
+            </tr>
+          `
+        )
+        .join("");
+
+      box.innerHTML = `
+        <div class="note">파일: ${data.filename || data.file_id || "-"} / 총 엔티티: ${data.total ?? 0} / 메타: ${data.meta_path || "-"}</div>
+        <div style="margin:8px 0;">${countChips}</div>
+        ${renderKeyValueTable("파일/문서", documentMeta)}
+        ${renderKeyValueTable("HEADER 섹션", headerMeta)}
+        ${
+          tablesMeta
+            ? [
+                renderListTable("TABLES - LAYERS", tablesMeta.layers, ["name", "color_index", "true_color", "linetype", "is_on", "is_locked", "is_plottable"]),
+                renderListTable("TABLES - LINETYPES", tablesMeta.linetypes, ["name", "length", "pattern"]),
+                renderListTable("TABLES - TEXT_STYLES", tablesMeta.text_styles, ["name", "font", "height", "width_factor", "oblique"]),
+                renderListTable("TABLES - DIMENSION_STYLES", tablesMeta.dim_styles, ["name", "arrow_size", "text_height", "unit_format", "tolerance"]),
+                renderListTable("TABLES - BLOCK_RECORDS", tablesMeta.block_records, ["name", "entity_count", "insert_count", "description", "base_point"]),
+              ].join("")
+            : '<div class="note">TABLES 섹션: 데이터 없음</div>'
+        }
+        ${
+          layoutsMeta
+            ? renderListTable(
+                "PaperSpace / Layouts",
+                layoutsMeta.layouts,
+                ["name", "scale", "tab_order", "unit_factor", "plot_layout_flags", "viewports"]
+              )
+            : '<div class="note">PaperSpace / Layouts: 데이터 없음</div>'
+        }
+        <h3 style="margin-top:12px;">엔티티 미리보기 (전체)</h3>
+        <div class="table-wrap">
+          ${
+            entities
+              ? `<table>
+                  <thead>
+                    <tr><th>ID</th><th>Type</th><th>Layer</th><th>Length</th><th>Area</th><th>Properties</th></tr>
+                  </thead>
+                  <tbody>${entities}</tbody>
+                </table>`
+              : '<div class="note" style="padding:8px;">표시할 엔티티가 없습니다.</div>'
+          }
+        </div>
+      `;
     }
 
     // 초기 로드

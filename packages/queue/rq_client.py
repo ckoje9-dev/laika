@@ -1,6 +1,7 @@
 """RQ 기반 큐 헬퍼."""
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Any, Callable, Mapping
 
@@ -22,10 +23,17 @@ def get_queue(name: str = "default") -> Queue:
 def enqueue(job_path: str, *args: Any, **kwargs: Any) -> Job:
     """job_path: 'module.submodule:function' 형태로 함수 경로 지정."""
     module_path, func_name = job_path.rsplit(".", 1)
+    q = get_queue()
+    return q.enqueue(run_async_job, module_path, func_name, args, kwargs)
+
+
+def run_async_job(module_path: str, func_name: str, args: tuple[Any, ...], kwargs: dict[str, Any]):
+    """동기/비동기 잡을 모두 지원: 비동기면 asyncio.run으로 실행."""
     module = importlib.import_module(module_path)
     func = getattr(module, func_name)
-    q = get_queue()
-    return q.enqueue(func, *args, **kwargs)
+    if asyncio.iscoroutinefunction(func):
+        return asyncio.run(func(*args, **kwargs))
+    return func(*args, **kwargs)
 
 
 def start_worker(job_funcs: Mapping[str, Callable[..., Any]]):

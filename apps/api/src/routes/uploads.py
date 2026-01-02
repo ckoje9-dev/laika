@@ -1,11 +1,12 @@
-"""업로드 초기화 및 변환 상태 조회 라우터."""
+"""업로드 초기화 및 변환/파싱 상태 조회 라우터."""
+import json
 import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.db.src.session import get_session
@@ -15,6 +16,7 @@ from packages.queue import enqueue
 router = APIRouter(tags=["uploads"])
 
 STORAGE_ORIGINAL_PATH = Path(os.getenv("STORAGE_ORIGINAL_PATH", "storage/original"))
+STORAGE_DERIVED_PATH = Path(os.getenv("STORAGE_DERIVED_PATH", "storage/derived"))
 
 
 class UploadInitRequest(BaseModel):
@@ -34,6 +36,8 @@ class ParseResponse(BaseModel):
     file_id: str
     enqueued: bool
     message: str | None = None
+    parsed: bool | None = None
+    meta_path: str | None = None
 
 
 def _infer_type(filename: str) -> str:
@@ -47,6 +51,32 @@ def _infer_type(filename: str) -> str:
     if ext in ("png", "jpg", "jpeg", "webp"):
         return "img"
     return "doc"
+
+
+def _meta_jsonl_path(file_row: db_models.File) -> Path | None:
+    if not file_row.path_dxf:
+        return None
+    stem = Path(file_row.path_dxf).stem
+    return STORAGE_DERIVED_PATH / f"{stem}_meta.jsonl"
+
+
+def _load_jsonl(path: Path | None) -> list[dict]:
+    if path is None or not path.exists():
+        return []
+    records = []
+    try:
+        with path.open("r", encoding="utf-8") as fp:
+            for line in fp:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+    except OSError:
+        return []
+    return records
 
 
 @router.post("/init", response_model=UploadInitResponse, status_code=201)
@@ -162,6 +192,65 @@ async def download_file(file_id: str, kind: str = "dxf", session: AsyncSession =
         return FileResponse(file_row.path_original, media_type="application/octet-stream", filename=Path(file_row.path_original).name)
 
     raise HTTPException(status_code=400, detail="unsupported kind")
+
+
+@router.get("/{file_id}/parsed")
+async def get_parsed_preview(
+    file_id: str,
+    limit: int | None = None,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_session),
+):
+    file_row = await session.get(db_models.File, file_id)
+    if not file_row:
+        raise HTTPException(status_code=404, detail="file not found")
+
+    meta_path = _meta_jsonl_path(file_row)
+    metadata = _load_jsonl(meta_path)
+
+    counts_stmt = (
+        select(db_models.DxfEntityRaw.type, func.count())
+        .where(db_models.DxfEntityRaw.file_id == file_id)
+        .group_by(db_models.DxfEntityRaw.type)
+    )
+    counts_result = await session.execute(counts_stmt)
+    counts = {t: c for t, c in counts_result.all()}
+
+    total_stmt = select(func.count()).where(db_models.DxfEntityRaw.file_id == file_id)
+    total = (await session.execute(total_stmt)).scalar_one()
+
+    entities_stmt = select(
+        db_models.DxfEntityRaw.id,
+        db_models.DxfEntityRaw.type,
+        db_models.DxfEntityRaw.layer,
+        db_models.DxfEntityRaw.length,
+        db_models.DxfEntityRaw.area,
+        db_models.DxfEntityRaw.properties,
+    ).where(db_models.DxfEntityRaw.file_id == file_id).order_by(db_models.DxfEntityRaw.id).offset(offset)
+    if limit is not None:
+        entities_stmt = entities_stmt.limit(limit)
+    entity_rows = await session.execute(entities_stmt)
+    entities = []
+    for rid, dtype, layer, length, area, props in entity_rows.all():
+        entities.append(
+            {
+                "id": rid,
+                "type": dtype,
+                "layer": layer,
+                "length": float(length) if length is not None else None,
+                "area": float(area) if area is not None else None,
+                "properties": props,
+            }
+        )
+
+    return {
+        "file_id": file_id,
+        "metadata": metadata,
+        "counts": counts,
+        "total": total,
+        "entities": entities,
+        "meta_path": str(meta_path) if meta_path else None,
+    }
 
 
 @router.post("/{file_id}/parse", response_model=ParseResponse)
