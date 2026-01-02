@@ -282,12 +282,13 @@
               <div><strong>${row.filename}</strong> <span class="pill">${row.versionLabel}</span></div>
               <div class="note">file_id: ${row.fileId || "-"}</div>
             </div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button data-action="convert" data-idx="${idx}" ${row.status === "converting" ? "disabled" : ""}>변환</button>
-              <button data-action="parse" data-idx="${idx}" ${parseDisabled ? "disabled" : ""}>파싱</button>
-              <button data-action="preview" data-idx="${idx}" ${row.pathDxf ? "" : "disabled"}>파싱 결과</button>
-            </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button data-action="convert" data-idx="${idx}" ${row.status === "converting" ? "disabled" : ""}>변환</button>
+            <button data-action="parse" data-idx="${idx}" ${parseDisabled ? "disabled" : ""}>파싱</button>
+            <button data-action="preview" data-idx="${idx}" ${row.pathDxf ? "" : "disabled"}>파싱 결과</button>
+            <button data-action="parse2" data-idx="${idx}" ${row.pathDxf ? "" : "disabled"}>2차 파싱</button>
           </div>
+        </div>
           <div style="margin-top:8px;">
             <div class="note">상태: <span class="pill ${row.status}">${row.status}</span> ${row.message ? "(" + row.message + ")" : ""}</div>
             <div class="note">업로드 경로: ${row.uploadPath || "-"}</div>
@@ -310,6 +311,7 @@
           if (action === "convert") startConvert(globalIdx);
           if (action === "parse") startParse(globalIdx);
           if (action === "preview") viewParsed(globalIdx);
+          if (action === "parse2") startParse2(globalIdx);
         };
       });
     }
@@ -387,6 +389,17 @@
         row.message = e.message;
         renderFiles();
         log(`변환 실패: ${row.filename} (${e.message})`, "error");
+      }
+    }
+
+    async function startParse2(idx) {
+      const row = state.rows[idx];
+      if (!row?.fileId) return;
+      try {
+        await api(`/uploads/${row.fileId}/parse2`, { method: "POST" });
+        log(`2차 파싱 요청: ${row.filename}`, "info");
+      } catch (e) {
+        log(`2차 파싱 실패: ${e.message}`, "error");
       }
     }
 

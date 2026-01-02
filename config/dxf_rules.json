@@ -1,0 +1,6 @@
+{
+  "layer_rules": [
+    { "tag": "concrete", "contains": ["conc"], "color": 2 },
+    { "tag": "centerline", "contains": ["cen", "axis"], "color": 1 }
+  ]
+}

@@ -13,6 +13,7 @@ from argparse import ArgumentParser, Namespace
 from apps.worker.src.jobs import (
     dwg_to_dxf,
     dxf_parse,
+    dxf_parse2,
     semantic_build,
     index_project,
 )
@@ -28,6 +29,7 @@ logger = logging.getLogger("worker")
 JOB_MAP = {
     "dwg_to_dxf": dwg_to_dxf,
     "dxf_parse": dxf_parse,
+    "dxf_parse2": dxf_parse2,
     "semantic_build": semantic_build,
     "index_project": index_project,
 }

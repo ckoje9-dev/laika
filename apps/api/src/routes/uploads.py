@@ -296,3 +296,23 @@ async def enqueue_convert(file_id: str, session: AsyncSession = Depends(get_sess
         message = str(e)
 
     return ParseResponse(file_id=file_id, enqueued=enqueued, message=message)
+
+
+@router.post("/{file_id}/parse2", response_model=ParseResponse)
+async def enqueue_parse2(file_id: str, session: AsyncSession = Depends(get_session)):
+    file_row = await session.get(db_models.File, file_id)
+    if not file_row:
+        raise HTTPException(status_code=404, detail="file not found")
+
+    enqueued = False
+    message: str | None = None
+    try:
+        enqueue("apps.worker.src.jobs.dxf_parse2.run", file_id=file_id)
+        enqueued = True
+    except Exception as e:  # pragma: no cover
+        import logging
+
+        logging.getLogger(__name__).warning("dxf_parse2 enqueue 실패: %s", e)
+        message = str(e)
+
+    return ParseResponse(file_id=file_id, enqueued=enqueued, message=message)

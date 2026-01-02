@@ -25,6 +25,15 @@ STORAGE_DERIVED_PATH = Path(os.getenv("STORAGE_DERIVED_PATH", "storage/derived")
 EZDXF_CACHE_DIR = Path(os.getenv("EZDXF_CACHE_DIR", ".cache/ezdxf"))
 UNIT_INPUT = os.getenv("UNIT_INPUT", "mm")
 UNIT_OUTPUT = os.getenv("UNIT_OUTPUT", "m")
+INSUNITS_MAP = {
+    0: "unitless",
+    1: "inches",
+    2: "feet",
+    3: "miles",
+    4: "millimeter",
+    5: "centimeter",
+    6: "meter",
+}
 
 
 def _ensure_ezdxf():
@@ -297,15 +306,20 @@ def _collect_document_metadata(doc) -> dict[str, Any]:
     return {
         "section": "document",
         "dxf_version": doc.dxfversion,
+        "insunits_label": INSUNITS_MAP.get(int(doc.header.get("$INSUNITS")))
+        if doc.header.get("$INSUNITS") is not None
+        else None,
     }
 
 
 def _collect_header_metadata(doc) -> dict[str, Any]:
     header = doc.header
+    insunits_raw = header.get("$INSUNITS")
     return {
         "section": "header",
         "values": {
-            "$INSUNITS": header.get("$INSUNITS"),
+            "$INSUNITS": insunits_raw,
+            "insunits_label": INSUNITS_MAP.get(int(insunits_raw)) if insunits_raw is not None else None,
             "$EXTMIN": header.get("$EXTMIN"),
             "$EXTMAX": header.get("$EXTMAX"),
             "$LIMMIN": header.get("$LIMMIN"),
