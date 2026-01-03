@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
@@ -60,6 +61,13 @@ def _meta_jsonl_path(file_row: db_models.File) -> Path | None:
     return STORAGE_DERIVED_PATH / f"{stem}_meta.jsonl"
 
 
+def _tables_json_path(file_row: db_models.File) -> Path | None:
+    if not file_row.path_dxf:
+        return None
+    stem = Path(file_row.path_dxf).stem
+    return STORAGE_DERIVED_PATH / f"{stem}_tables.json"
+
+
 def _load_jsonl(path: Path | None) -> list[dict]:
     if path is None or not path.exists():
         return []
@@ -77,6 +85,16 @@ def _load_jsonl(path: Path | None) -> list[dict]:
     except OSError:
         return []
     return records
+
+
+def _load_json(path: Path | None) -> Any:
+    if path is None or not path.exists():
+        return None
+    try:
+        with path.open("r", encoding="utf-8") as fp:
+            return json.load(fp)
+    except Exception:
+        return None
 
 
 @router.post("/init", response_model=UploadInitResponse, status_code=201)
@@ -207,6 +225,8 @@ async def get_parsed_preview(
 
     meta_path = _meta_jsonl_path(file_row)
     metadata = _load_jsonl(meta_path)
+    table_path = _tables_json_path(file_row)
+    tables = _load_json(table_path)
 
     counts_stmt = (
         select(db_models.DxfEntityRaw.type, func.count())
@@ -250,6 +270,8 @@ async def get_parsed_preview(
         "total": total,
         "entities": entities,
         "meta_path": str(meta_path) if meta_path else None,
+        "tables": tables,
+        "tables_path": str(table_path) if table_path else None,
     }
 
 

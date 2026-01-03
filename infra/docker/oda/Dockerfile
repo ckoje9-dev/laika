@@ -47,15 +47,24 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y /tmp/oda.deb && \
     rm -rf /var/lib/apt/lists/* /tmp/oda.deb
 
+# SHX 폰트 배치 (빌드 전 infra/docker/oda/fonts/whgdtxt.shx 를 준비하세요)
+RUN mkdir -p /usr/share/fonts/oda-shx /usr/share/opendesign/Fonts /usr/local/share/fonts/oda-shx
+COPY infra/docker/oda/fonts/* /usr/share/fonts/oda-shx/
+COPY infra/docker/oda/fonts/* /usr/share/opendesign/Fonts/
+COPY infra/docker/oda/fonts/* /usr/local/share/fonts/oda-shx/
+RUN fc-cache -fv
+
 # 런타임 디렉토리 (xvfb/xcb 경고 방지)
 ENV XDG_RUNTIME_DIR=/tmp/runtime-root
+ENV ODACONV_FONTPATH="/usr/share/fonts/oda-shx:/usr/share/opendesign/Fonts:/usr/local/share/fonts/oda-shx"
 
 # Xvfb 수동 구동 후 ODAFileConverter 실행 스크립트
 RUN cat >/usr/local/bin/oda-entrypoint.sh <<'EOF' \
  && chmod +x /usr/local/bin/oda-entrypoint.sh
 #!/bin/sh
 set -e
-Xvfb :99 -screen 0 1024x768x24 -nolisten tcp -auth /tmp/xvfb-run.Xauthority &
+# Xauthority가 없어서 실패하는 이슈가 있어 -auth 옵션을 제거
+Xvfb :99 -screen 0 1024x768x24 -nolisten tcp &
 export DISPLAY=:99
 exec /usr/bin/ODAFileConverter "$@"
 EOF

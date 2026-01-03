@@ -282,13 +282,11 @@
               <div><strong>${row.filename}</strong> <span class="pill">${row.versionLabel}</span></div>
               <div class="note">file_id: ${row.fileId || "-"}</div>
             </div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button data-action="convert" data-idx="${idx}" ${row.status === "converting" ? "disabled" : ""}>변환</button>
-            <button data-action="parse" data-idx="${idx}" ${parseDisabled ? "disabled" : ""}>파싱</button>
-            <button data-action="preview" data-idx="${idx}" ${row.pathDxf ? "" : "disabled"}>파싱 결과</button>
-            <button data-action="parse2" data-idx="${idx}" ${row.pathDxf ? "" : "disabled"}>2차 파싱</button>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button data-action="convert" data-idx="${idx}" ${row.status === "converting" ? "disabled" : ""}>변환</button>
+              <button data-action="parse" data-idx="${idx}" ${parseDisabled ? "disabled" : ""}>파싱</button>
+            </div>
           </div>
-        </div>
           <div style="margin-top:8px;">
             <div class="note">상태: <span class="pill ${row.status}">${row.status}</span> ${row.message ? "(" + row.message + ")" : ""}</div>
             <div class="note">업로드 경로: ${row.uploadPath || "-"}</div>
@@ -310,8 +308,6 @@
           const globalIdx = state.rows.findIndex((r) => r.fileId === row.fileId);
           if (action === "convert") startConvert(globalIdx);
           if (action === "parse") startParse(globalIdx);
-          if (action === "preview") viewParsed(globalIdx);
-          if (action === "parse2") startParse2(globalIdx);
         };
       });
     }
@@ -392,14 +388,14 @@
       }
     }
 
-    async function startParse2(idx) {
+    async function startParse2(idx, opts = {}) {
       const row = state.rows[idx];
       if (!row?.fileId) return;
       try {
         await api(`/uploads/${row.fileId}/parse2`, { method: "POST" });
-        log(`2차 파싱 요청: ${row.filename}`, "info");
+        if (!opts.silent) log(`2차 파싱 요청: ${row.filename}`, "info");
       } catch (e) {
-        log(`2차 파싱 실패: ${e.message}`, "error");
+        if (!opts.silent) log(`2차 파싱 실패: ${e.message}`, "error");
       }
     }
 
@@ -441,6 +437,10 @@
           row.progress = 100;
           renderFiles();
           log(`${options.target === "parse" ? "파싱" : "변환"} 완료: ${row.filename}`, "success");
+          if (options.target === "parse") {
+            await startParse2(idx, { silent: true });
+            await viewParsed(idx);
+          }
         } else {
           row.progress = 100;
           renderFiles();
@@ -516,6 +516,35 @@
             .join("")
         : '<div class="note">엔티티가 없습니다.</div>';
 
+      const renderTables = (tables) => {
+        if (!tables || tables.length === 0) return '<div class="note">추출된 표가 없습니다.</div>';
+        return tables
+          .map((tbl, idx) => {
+            const rows = tbl.cells || [];
+            if (rows.length === 0) return `<div class="note">표 ${idx + 1}: 셀 없음</div>`;
+            rows.sort((a, b) => a.row - b.row || a.col - b.col);
+            const maxRow = Math.max(...rows.map((r) => r.row));
+            const maxCol = Math.max(...rows.map((r) => r.col));
+            let htmlRows = "";
+            for (let r = 0; r <= maxRow; r++) {
+              let tds = "";
+              for (let c = 0; c <= maxCol; c++) {
+                const cell = rows.find((x) => x.row === r && x.col === c);
+                const text = cell?.texts?.map((t) => t.text).filter(Boolean).join("<br>") || "";
+                tds += `<td style="min-width:120px; vertical-align:top;">${text}</td>`;
+              }
+              htmlRows += `<tr>${tds}</tr>`;
+            }
+            return `
+              <div class="note">표 ${idx + 1} (셀: ${rows.length})</div>
+              <div class="table-wrap">
+                <table><tbody>${htmlRows}</tbody></table>
+              </div>
+            `;
+          })
+          .join("");
+      };
+
       const entities = (data.entities || [])
         .map(
           (e) => `
@@ -556,6 +585,8 @@
               )
             : '<div class="note">PaperSpace / Layouts: 데이터 없음</div>'
         }
+        <h3 style="margin-top:12px;">2차 파싱(표 추출)</h3>
+        ${renderTables(data.tables)}
         <h3 style="margin-top:12px;">엔티티 미리보기 (전체)</h3>
         <div class="table-wrap">
           ${

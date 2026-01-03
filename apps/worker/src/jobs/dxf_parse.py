@@ -257,6 +257,22 @@ def _entity_properties(entity) -> dict[str, Any]:
     return props
 
 
+def _json_safe(value: Any) -> Any:
+    """Vec3 등 직렬화 불가 객체를 리스트/문자열로 정규화."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if hasattr(value, "x") and hasattr(value, "y"):
+        coords = [float(getattr(value, "x", 0.0)), float(getattr(value, "y", 0.0))]
+        if hasattr(value, "z"):
+            coords.append(float(getattr(value, "z", 0.0)))
+        return coords
+    return str(value)
+
+
 def _entity_counts(doc) -> dict[str, int]:
     msp = doc.modelspace()
     entity_types = [
@@ -555,7 +571,7 @@ async def run(file_id: Optional[str] = None, src: Optional[Path] = None, jsonl_p
             bbox=WKTElement(bbox_wkt, srid=models.SRID_LOCAL_CAD) if bbox_wkt else None,
             length=_mm_to_m(length),
             area=_area_mm2_to_m2(area),
-            properties=_entity_properties(entity),
+            properties=_json_safe(_entity_properties(entity)),
         )
         entities.append(rec)
 
