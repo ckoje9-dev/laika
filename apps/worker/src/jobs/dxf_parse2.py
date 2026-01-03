@@ -42,6 +42,20 @@ def _classify_layer(layer: str | None, color_index: int | None, rules: list[dict
     return None
 
 
+def _match_layer_definition(layer: str | None, color_index: int | None, defs: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not layer or not defs:
+        return None
+    for item in defs:
+        name = item.get("name")
+        if not name or name.lower() != layer.lower():
+            continue
+        color = item.get("color")
+        if color is not None and color_index is not None and int(color) != int(color_index):
+            continue
+        return {"name": name, "color": color, "description": item.get("description")}
+    return None
+
+
 async def run(file_id: str | None = None) -> None:
     """룰 기반 2차 파싱: 레이어 규칙 등을 적용해 properties.classification을 갱신."""
     if not file_id:
@@ -50,9 +64,10 @@ async def run(file_id: str | None = None) -> None:
 
     rules = _load_rules()
     layer_rules = rules.get("layer_rules") or []
+    layer_defs = rules.get("layer_definitions") or []
     if not layer_rules:
         logger.warning("레이어 룰이 비어 있습니다. 2차 파싱 없이 종료합니다.")
-        return
+        # 정의만으로도 덮어쓸 수 있으므로 계속 진행
 
     async with SessionLocal() as session:
         try:
@@ -69,8 +84,12 @@ async def run(file_id: str | None = None) -> None:
 
             for rid, layer, props in rows:
                 props = props or {}
-                classification = _classify_layer(layer, props.get("color_index"), layer_rules)
-                props["classification"] = classification
+                classification = _classify_layer(layer, props.get("color_index"), layer_rules) if layer_rules else None
+                if classification:
+                    props["classification"] = classification
+                layer_def = _match_layer_definition(layer, props.get("color_index"), layer_defs) if layer_defs else None
+                if layer_def:
+                    props["layer_definition"] = layer_def
                 await session.execute(
                     update(models.DxfEntityRaw)
                     .where(models.DxfEntityRaw.id == rid)
