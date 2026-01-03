@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 DXF_RULES_PATH = Path(os.getenv("DXF_RULES_PATH", "config/dxf_rules.json"))
 STORAGE_DERIVED_PATH = Path(os.getenv("STORAGE_DERIVED_PATH", "storage/derived"))
 GRID_TOL = 1e-3
+AXIS_LAYER = "A-CEN1"
+AXIS_CLUSTER_TOL = 5.0
+STRUCTURE_PATH_SUFFIX = "_structure.json"
+AXES_PATH_SUFFIX = "_axes.json"
 
 
 def _load_rules() -> dict[str, Any]:
@@ -116,6 +120,119 @@ def _segments_from_linestring(points: list[tuple[float, float]]) -> list[tuple[t
     return segs
 
 
+def _assign_index(values: list[float], tol: float = 1e-2) -> tuple[list[float], dict[float, int]]:
+    """좌표값을 tol 기준으로 클러스터링하여 정렬된 고유값과 매핑을 반환."""
+    uniq = _unique_sorted(values, tol)
+    mapping: dict[float, int] = {}
+    for v in values:
+        for idx, u in enumerate(uniq):
+            if abs(v - u) <= tol:
+                mapping[v] = idx
+                break
+    return uniq, mapping
+
+
+def _poly_area_bbox(points: list[tuple[float, float]]) -> tuple[float | None, tuple[float, float, float, float] | None]:
+    """단순 다각형 면적과 bbox를 계산."""
+    if len(points) < 3:
+        return None, _bbox_from_points(points)
+    area = 0.0
+    for idx, (x1, y1) in enumerate(points):
+        x2, y2 = points[(idx + 1) % len(points)]
+        area += x1 * y2 - x2 * y1
+    area = abs(area) / 2.0
+    return area, _bbox_from_points(points)
+
+
+def _extract_axes(rows: list[tuple], tol: float = AXIS_CLUSTER_TOL) -> dict[str, Any]:
+    """A-CEN1 레이어의 수평/수직 축선을 모으고 클러스터링."""
+    xs: list[float] = []
+    ys: list[float] = []
+    axis_entities: list[int] = []
+
+    for rid, dtype, layer, _props, geom_wkt in rows:
+        if layer != AXIS_LAYER:
+            continue
+        if dtype == "LINE":
+            pts = _parse_linestring_wkt(geom_wkt)
+            if len(pts) == 2:
+                (x1, y1), (x2, y2) = pts
+                if abs(x1 - x2) <= GRID_TOL:
+                    xs.append((x1 + x2) / 2)
+                if abs(y1 - y2) <= GRID_TOL:
+                    ys.append((y1 + y2) / 2)
+                axis_entities.append(rid)
+        elif dtype in ("LWPOLYLINE", "POLYLINE"):
+            pts = _parse_linestring_wkt(geom_wkt)
+            for (x1, y1), (x2, y2) in _segments_from_linestring(pts):
+                if abs(x1 - x2) <= GRID_TOL:
+                    xs.append((x1 + x2) / 2)
+                if abs(y1 - y2) <= GRID_TOL:
+                    ys.append((y1 + y2) / 2)
+            axis_entities.append(rid)
+
+    x_unique = _unique_sorted(xs, tol)
+    y_unique = _unique_sorted(ys, tol)
+
+    def _spacing(values: list[float]) -> list[float]:
+        if len(values) < 2:
+            return []
+        return [round(values[i + 1] - values[i], 3) for i in range(len(values) - 1)]
+
+    return {
+        "layer": AXIS_LAYER,
+        "x_axes": x_unique,
+        "y_axes": y_unique,
+        "x_spacing": _spacing(x_unique),
+        "y_spacing": _spacing(y_unique),
+        "entity_ids": axis_entities,
+    }
+
+
+def _collect_structure(rows: list[tuple], axes: dict[str, Any]) -> dict[str, Any]:
+    """레이어 기반으로 구조요소 분류."""
+    concrete_columns: list[dict[str, Any]] = []
+    steel_columns: list[dict[str, Any]] = []
+    walls: list[dict[str, Any]] = []
+    slabs: list[dict[str, Any]] = []
+    openings: list[dict[str, Any]] = []
+
+    for rid, dtype, layer, props, geom_wkt in rows:
+        pts = _parse_linestring_wkt(geom_wkt) if geom_wkt and geom_wkt.startswith("LINESTRING") else []
+        area, bbox = _poly_area_bbox(pts) if pts else (None, None)
+
+        if layer == "A-COL":
+            if dtype == "CIRCLE":
+                center = props.get("center") or _parse_point_wkt(geom_wkt)
+                concrete_columns.append({"id": rid, "type": dtype, "center": center, "area": props.get("area"), "bbox": bbox})
+            elif dtype in ("LWPOLYLINE", "POLYLINE"):
+                concrete_columns.append({"id": rid, "type": dtype, "bbox": bbox, "area": area, "vertices": pts})
+        elif layer == "A-STL":
+            if dtype in ("LWPOLYLINE", "POLYLINE", "CIRCLE"):
+                steel_columns.append({"id": rid, "type": dtype, "bbox": bbox, "area": area, "vertices": pts})
+        elif layer == "A-CON":
+            if dtype in ("LWPOLYLINE", "POLYLINE"):
+                is_closed = bool(pts) and (pts[0] == pts[-1])
+                target = slabs if (is_closed and area and area > 0) else walls
+                target.append({"id": rid, "type": dtype, "bbox": bbox, "area": area, "is_closed": is_closed, "vertices": pts})
+        elif layer == "A-OPEN1":
+            openings.append({"id": rid, "type": dtype, "bbox": bbox, "geom": geom_wkt})
+
+    # 슬래브 중 최대 면적을 대표 슬래브로 표시
+    slab_main_id = None
+    if slabs:
+        slab_main_id = max(slabs, key=lambda s: s.get("area") or 0).get("id")
+    return {
+        "axes_used": {"x_axes": axes.get("x_axes"), "y_axes": axes.get("y_axes"), "layer": axes.get("layer")},
+        "concrete_columns": concrete_columns,
+        "steel_columns": steel_columns,
+        "walls": walls,
+        "slabs": slabs,
+        "main_slab_id": slab_main_id,
+        "openings": openings,
+    }
+
+
 async def run(file_id: str | None = None) -> None:
     """룰 기반 2차 파싱: 레이어 규칙 등을 적용해 properties.classification을 갱신."""
     if not file_id:
@@ -163,95 +280,31 @@ async def run(file_id: str | None = None) -> None:
                 {"file_id": file_id},
             )
             await session.commit()
-            logger.info("2차 파싱 완료: file_id=%s (entities=%s)", file_id, len(rows))
+            axes = _extract_axes(rows)
+            axes_path = None
+            structure_path = None
+            structure = _collect_structure(rows, axes)
+            if file_row and file_row.path_dxf:
+                stem = Path(file_row.path_dxf).stem
+                axes_path = STORAGE_DERIVED_PATH / f"{stem}{AXES_PATH_SUFFIX}"
+                structure_path = STORAGE_DERIVED_PATH / f"{stem}{STRUCTURE_PATH_SUFFIX}"
+                axes_path.parent.mkdir(parents=True, exist_ok=True)
+                with axes_path.open("w", encoding="utf-8") as fp:
+                    json.dump(axes, fp, ensure_ascii=False, indent=2)
+                with structure_path.open("w", encoding="utf-8") as fp:
+                    json.dump(structure, fp, ensure_ascii=False, indent=2)
+                logger.info("축선 정보 저장: %s", axes_path)
+                logger.info("구조 정보 저장: %s", structure_path)
 
-            # 2) 표 추출: 수평/수직 선분 그리드와 텍스트를 이용해 셀 구성
-            verticals: list[float] = []
-            horizontals: list[float] = []
-            text_points: list[dict[str, Any]] = []
-
-            for rid, dtype, layer, props, geom_wkt in rows:
-                if dtype == "LINE":
-                    pts = _parse_linestring_wkt(geom_wkt)
-                    if len(pts) == 2:
-                        (x1, y1), (x2, y2) = pts
-                        if abs(x1 - x2) <= GRID_TOL:
-                            verticals.append((x1 + x2) / 2)
-                        if abs(y1 - y2) <= GRID_TOL:
-                            horizontals.append((y1 + y2) / 2)
-                elif dtype in ("LWPOLYLINE", "POLYLINE"):
-                    pts = _parse_linestring_wkt(geom_wkt)
-                    for s in _segments_from_linestring(pts):
-                        (x1, y1), (x2, y2) = s
-                        if abs(x1 - x2) <= GRID_TOL:
-                            verticals.append((x1 + x2) / 2)
-                        if abs(y1 - y2) <= GRID_TOL:
-                            horizontals.append((y1 + y2) / 2)
-                elif dtype in ("TEXT", "MTEXT"):
-                    pt = _parse_point_wkt(geom_wkt)
-                    if pt:
-                        text_points.append(
-                            {
-                                "id": rid,
-                                "layer": layer,
-                                "point": pt,
-                                "text": props.get("text") or props.get("value"),
-                            }
-                        )
-
-            xs = _unique_sorted(verticals)
-            ys = _unique_sorted(horizontals)
-
-            tables = []
-            cells = []
-            for r in range(len(ys) - 1):
-                for c in range(len(xs) - 1):
-                    bbox = (xs[c], ys[r], xs[c + 1], ys[r + 1])
-                    cell_texts = [t for t in text_points if _contains_point(bbox, t["point"])]
-                    if not cell_texts:
-                        continue
-                    cells.append({"row": r, "col": c, "bbox": bbox, "texts": cell_texts})
-
-            if cells:
-                tables.append({"grid_x": xs, "grid_y": ys, "cells": cells})
-            # 폴백: 그리드가 없을 때 닫힌 폴리라인을 테이블 경계로 보고 내부 텍스트를 단일 셀로 묶음
-            if not tables:
-                for rid, dtype, layer, props, geom_wkt in rows:
-                    if dtype in ("LWPOLYLINE", "POLYLINE"):
-                        pts = _parse_linestring_wkt(geom_wkt)
-                        if len(pts) >= 4 and pts[0] == pts[-1]:
-                            bbox = _bbox_from_points(pts)
-                            if not bbox:
-                                continue
-                            cell_texts = [t for t in text_points if _contains_point(bbox, t["point"])]
-                            if cell_texts:
-                                tables.append(
-                                    {
-                                        "boundary_id": rid,
-                                        "layer": layer,
-                                        "cells": [
-                                            {
-                                                "row": 0,
-                                                "col": 0,
-                                                "bbox": bbox,
-                                                "texts": cell_texts,
-                                            }
-                                        ],
-                                    }
-                                )
-
-            if file_row:
-                stem = Path(file_row.path_dxf).stem if file_row.path_dxf else file_id
-            else:
-                stem = file_id
-            table_path = STORAGE_DERIVED_PATH / f"{stem}_tables.json"
-            try:
-                STORAGE_DERIVED_PATH.mkdir(parents=True, exist_ok=True)
-                with table_path.open("w", encoding="utf-8") as fp:
-                    json.dump(tables, fp, ensure_ascii=False, indent=2)
-                logger.info("테이블 추출 완료: %s (tables=%s)", table_path, len(tables))
-            except Exception as e:  # pragma: no cover
-                logger.warning("테이블 저장 실패: %s", e)
+            logger.info(
+                "2차 파싱 완료: file_id=%s (entities=%s, axes=%s, structure_cols=%s walls=%s slabs=%s)",
+                file_id,
+                len(rows),
+                len(axes.get("entity_ids", [])),
+                len(structure.get("concrete_columns", [])) if structure else 0,
+                len(structure.get("walls", [])) if structure else 0,
+                len(structure.get("slabs", [])) if structure else 0,
+            )
         except SQLAlchemyError as e:
             await session.rollback()
             logger.exception("2차 파싱 중 오류: %s", e)
