@@ -61,27 +61,6 @@ def _meta_jsonl_path(file_row: db_models.File) -> Path | None:
     return STORAGE_DERIVED_PATH / f"{stem}_meta.jsonl"
 
 
-def _tables_json_path(file_row: db_models.File) -> Path | None:
-    if not file_row.path_dxf:
-        return None
-    stem = Path(file_row.path_dxf).stem
-    return STORAGE_DERIVED_PATH / f"{stem}_tables.json"
-
-
-def _axes_json_path(file_row: db_models.File) -> Path | None:
-    if not file_row.path_dxf:
-        return None
-    stem = Path(file_row.path_dxf).stem
-    return STORAGE_DERIVED_PATH / f"{stem}_axes.json"
-
-
-def _structure_json_path(file_row: db_models.File) -> Path | None:
-    if not file_row.path_dxf:
-        return None
-    stem = Path(file_row.path_dxf).stem
-    return STORAGE_DERIVED_PATH / f"{stem}_structure.json"
-
-
 def _load_jsonl(path: Path | None) -> list[dict]:
     if path is None or not path.exists():
         return []
@@ -239,12 +218,8 @@ async def get_parsed_preview(
 
     meta_path = _meta_jsonl_path(file_row)
     metadata = _load_jsonl(meta_path)
-    table_path = _tables_json_path(file_row)
-    tables = _load_json(table_path)
-    axes_path = _axes_json_path(file_row)
-    axes = _load_json(axes_path)
-    structure_path = _structure_json_path(file_row)
-    structure = _load_json(structure_path)
+    table_path = None
+    tables = None
 
     counts_stmt = (
         select(db_models.DxfEntityRaw.type, func.count())
@@ -290,10 +265,6 @@ async def get_parsed_preview(
         "meta_path": str(meta_path) if meta_path else None,
         "tables": tables,
         "tables_path": str(table_path) if table_path else None,
-        "axes": axes,
-        "axes_path": str(axes_path) if axes_path else None,
-        "structure": structure,
-        "structure_path": str(structure_path) if structure_path else None,
     }
 
 
@@ -351,12 +322,12 @@ async def enqueue_parse2(file_id: str, session: AsyncSession = Depends(get_sessi
     enqueued = False
     message: str | None = None
     try:
-        enqueue("apps.worker.src.jobs.dxf_parse2.run", file_id=file_id)
-        enqueued = True
+        # 비활성화 상태이므로 큐에 넣지 않고 바로 반환
+        message = "parse2 is disabled"
     except Exception as e:  # pragma: no cover
         import logging
 
         logging.getLogger(__name__).warning("dxf_parse2 enqueue 실패: %s", e)
         message = str(e)
 
-    return ParseResponse(file_id=file_id, enqueued=enqueued, message=message)
+    return ParseResponse(file_id=file_id, enqueued=enqueued, message=message, parsed=False)

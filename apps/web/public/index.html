@@ -159,8 +159,6 @@
       currentParsed: null, // {fileId, metadata, counts, entities, total, meta_path}
     };
 
-    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
     function log(line, type = "info") {
       const stamp = new Date().toLocaleTimeString();
       const row = document.createElement("div");
@@ -431,7 +429,7 @@
           renderFiles();
           log(`${options.target === "parse" ? "파싱" : "변환"} 완료: ${row.filename}`, "success");
           if (options.target === "parse") {
-            await triggerParse2(idx);
+            await viewParsed(idx);
           }
         } else {
           row.progress = 100;
@@ -456,20 +454,6 @@
       }
     }
 
-    async function triggerParse2(idx) {
-      const row = state.rows[idx];
-      if (!row?.fileId) return;
-      try {
-        await api(`/uploads/${row.fileId}/parse2`, { method: "POST" });
-        log(`2차 파싱 요청: ${row.filename}`, "info");
-        await sleep(1500);
-      } catch (e) {
-        log(`2차 파싱 실패(큐 요청 오류): ${e.message}`, "error");
-      } finally {
-        await viewParsed(idx);
-      }
-    }
-
     function renderParsed() {
       const box = $("parsedResult");
       if (!box) return;
@@ -483,8 +467,7 @@
       const headerMeta = (data.metadata || []).find((m) => m.section === "header");
       const tablesMeta = (data.metadata || []).find((m) => m.section === "tables");
       const layoutsMeta = (data.metadata || []).find((m) => m.section === "layouts");
-      const axes = data.axes;
-      const structure = data.structure;
+      const structure = null;
 
       const renderKeyValueTable = (title, obj) => {
         if (!obj) return `<div class="note">${title}: 데이터 없음</div>`;
@@ -563,43 +546,6 @@
                 ["name", "scale", "tab_order", "unit_factor", "plot_layout_flags", "viewports"]
               )
             : '<div class="note">PaperSpace / Layouts: 데이터 없음</div>'
-        }
-        ${
-          axes
-            ? `
-            <h3 style="margin-top:12px;">축선 인식</h3>
-            <div class="table-wrap">
-              <table>
-                <tbody>
-                  <tr><th>레이어</th><td>${axes.layer || "-"}</td></tr>
-                  <tr><th>X 축 좌표</th><td><div class="code-inline">${JSON.stringify(axes.x_axes || [], null, 2)}</div></td></tr>
-                  <tr><th>Y 축 좌표</th><td><div class="code-inline">${JSON.stringify(axes.y_axes || [], null, 2)}</div></td></tr>
-                  <tr><th>X 간격</th><td><div class="code-inline">${JSON.stringify(axes.x_spacing || [], null, 2)}</div></td></tr>
-                  <tr><th>Y 간격</th><td><div class="code-inline">${JSON.stringify(axes.y_spacing || [], null, 2)}</div></td></tr>
-                  <tr><th>축선 엔티티 ID</th><td><div class="code-inline">${JSON.stringify(axes.entity_ids || [], null, 2)}</div></td></tr>
-                </tbody>
-              </table>
-            </div>
-          `
-            : '<div class="note">축선 데이터 없음</div>'
-        }
-        ${
-          structure
-            ? `
-            <h3 style="margin-top:12px;">구조 인식</h3>
-            <div class="table-wrap">
-              <table>
-                <tbody>
-                  <tr><th>콘크리트 기둥 수</th><td>${structure.concrete_columns?.length || 0}</td></tr>
-                  <tr><th>철골 기둥 수</th><td>${structure.steel_columns?.length || 0}</td></tr>
-                  <tr><th>벽체 수</th><td>${structure.walls?.length || 0}</td></tr>
-                  <tr><th>슬래브 수</th><td>${structure.slabs?.length || 0} (대표: ${structure.main_slab_id || "-"})</td></tr>
-                  <tr><th>오프닝 수</th><td>${structure.openings?.length || 0}</td></tr>
-                </tbody>
-              </table>
-            </div>
-          `
-            : '<div class="note">구조 데이터 없음</div>'
         }
         <h3 style="margin-top:12px;">엔티티 미리보기 (전체)</h3>
         <div class="table-wrap">
