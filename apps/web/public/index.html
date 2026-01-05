@@ -138,13 +138,12 @@
     }
     section.active { display: block; }
     .hero {
-      background: linear-gradient(145deg, rgba(17,27,44,0.75), rgba(7,11,19,0.95));
-      border: 1px solid var(--border);
       border-radius: 18px;
-      padding: 32px;
-      box-shadow: var(--shadow);
+      padding: 22px 28px;
+      box-shadow: none;
+      text-align: center;
     }
-    .hero h1 { margin: 0 0 12px; font-size: 28px; }
+    .hero h1 { margin: 0 0 10px; font-size: 26px; }
     .hero p { margin: 4px 0 14px; color: var(--muted); }
     .pill {
       display: inline-flex;
@@ -197,6 +196,13 @@
       transition: all 0.2s ease;
       cursor: pointer;
     }
+    .drop-icon {
+      width: 120px;
+      height: 90px;
+      margin: 0 auto 10px;
+      background: url("data:image/svg+xml,%3Csvg width='140' height='120' viewBox='0 0 140 120' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='20' y='16' width='100' height='88' rx='10' stroke='%2399b8dc' stroke-width='4' stroke-dasharray='10 8' opacity='0.55'/%3E%3Cpath d='M50 64L70 44L90 64' stroke='%2399b8dc' stroke-width='6' stroke-linecap='round' stroke-linejoin='round' opacity='0.65'/%3E%3Cpath d='M70 44V88' stroke='%2399b8dc' stroke-width='6' stroke-linecap='round' opacity='0.65'/%3E%3C/svg%3E") center/contain no-repeat;
+      opacity: 0.9;
+    }
     .dropzone.dragover {
       border-color: var(--accent);
       background: rgba(109,243,195,0.08);
@@ -207,17 +213,17 @@
       background: var(--surface-2);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 12px;
+      padding: 10px 12px;
       display: grid;
-      grid-template-columns: 1.3fr 1fr 0.9fr;
+      grid-template-columns: 1.2fr 0.6fr 0.8fr 0.9fr 1.4fr auto;
       gap: 10px;
       align-items: center;
     }
-    .file-main { display: flex; flex-direction: column; gap: 6px; }
-    .file-name { font-weight: 700; }
+    .file-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-log { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .progress {
       width: 100%;
-      height: 10px;
+      height: 8px;
       border-radius: 12px;
       background: rgba(31,44,62,0.8);
       overflow: hidden;
@@ -252,6 +258,101 @@
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
+    }
+    .actions-center { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    .add-card {
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .add-card:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 10px 20px rgba(109,243,195,0.1);
+    }
+    .tab-layout {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+    .tab-rail {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .tab-rail button {
+      width: 100%;
+      justify-content: flex-start;
+    }
+    .tab-rail button.active {
+      border-color: var(--accent);
+      color: var(--text);
+      background: rgba(109,243,195,0.12);
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .row-select {
+      display: grid;
+      grid-template-columns: 140px 1fr 1fr;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .row-select label { color: var(--muted); }
+    .smart-select {
+      position: relative;
+    }
+    .smart-display {
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .smart-display .muted { margin: 0; color: var(--muted); }
+    .smart-dropdown {
+      position: absolute;
+      top: 110%;
+      left: 0;
+      right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      padding: 8px;
+      z-index: 30;
+      display: none;
+    }
+    .smart-select.open .smart-dropdown { display: block; }
+    .smart-search {
+      width: 100%;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .smart-list {
+      max-height: 200px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .smart-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text);
     }
     .accordion {
       border: 1px solid var(--border);
@@ -459,84 +560,95 @@
 
     <section id="convert">
       <div class="hero">
-        <div class="pill">STEP 1 · DXF 변환기</div>
-        <h1>DWG를 DXF로 변환하세요</h1>
-        <p>최대 100MB 파일을 업로드하고 변환 현황을 실시간으로 확인하세요.</p>
-        <div class="muted">상태 로그: 준비 → 업로드 중 → DXF 변환 중 → 완료 · 실패</div>
+        <div class="pill">STEP 1</div>
+        <h1>DXF 변환기</h1>
+        <p>웹에서 쉽게 DWG를 DXF로 변환하세요.</p>
       </div>
       <div class="layout">
         <div class="card" style="grid-column: span 2;">
-          <h3>파일 업로드 · 작업 제어</h3>
-          <div class="muted">DWG를 추가하고 바로 변환/다운로드를 실행하세요.</div>
+          <h3>파일 업로드</h3>
           <div class="dropzone" id="dropConvert">
-            <div style="font-size:15px; font-weight:700;">파일 선택 또는 여기로 드롭 (최대 100MB)</div>
-            <div class="muted" style="margin-top:6px;">DWG 지원 · 변환 결과는 동일한 파일명으로 DXF 다운로드</div>
+            <div class="drop-icon"></div>
+            <div style="font-size:17px; font-weight:700;">파일 선택</div>
+            <div class="muted" style="margin-top:6px;">또는 여기로 드롭 (최대 100MB)</div>
             <input type="file" id="inputConvert" accept=".dwg" multiple style="display:none;" />
           </div>
-          <div class="actions-row" style="margin-top:12px;">
-            <button class="btn primary" id="btnConvertStart">변환하기</button>
-            <button class="btn" id="btnConvertDownload">다운로드</button>
+          <div class="file-list" id="convertList" style="display:none;"></div>
+          <div class="actions-center">
+            <button class="btn primary" id="btnConvertStart" disabled>변환하기</button>
+            <button class="btn" id="btnConvertDownload" style="display:none;">다운로드</button>
           </div>
-          <div class="muted" style="margin-top:8px;">선택된 파일이 없으면 전체 변환을 실행합니다.</div>
-          <div class="file-list" id="convertList"></div>
         </div>
       </div>
     </section>
 
     <section id="analyze">
       <div class="hero">
-        <div class="pill">STEP 2 · AI 도면 분석기</div>
-        <h1>AI로 DXF 도면을 분석하세요</h1>
-        <p>업로드 후 기본 파싱(ezdxf) → 블록/레이어 지정 → 분석 결과 확인까지 한 흐름으로 진행됩니다.</p>
-        <div class="muted">상태 로그: 준비 → 업로드 중 → 파싱 중 → 완료 · 실패</div>
+        <div class="pill">STEP 2</div>
+        <h1>AI 도면 분석기</h1>
+        <p>AI로 DXF 도면을 분석하세요.</p>
         <div id="analyzeLock" class="pill-lock" style="margin-top:8px;">로그인 시 이용 가능합니다.</div>
       </div>
       <div class="layout">
         <div class="card" style="grid-column: span 2;">
-          <h3>파일 업로드 · 분석 단계</h3>
-          <div class="muted">DXF를 추가하고 기본 파싱/다음 단계로 바로 진행하세요.</div>
+          <h3>파일 업로드</h3>
           <div class="dropzone" id="dropAnalyze">
-            <div style="font-size:15px; font-weight:700;">파일 선택 또는 여기로 드롭 (최대 100MB)</div>
-            <div class="muted" style="margin-top:6px;">DXF 지원 · 업로드 후 기본 파싱</div>
+            <div class="drop-icon"></div>
+            <div style="font-size:17px; font-weight:700;">파일 선택</div>
+            <div class="muted" style="margin-top:6px;">또는 여기로 드롭 (최대 100MB)</div>
             <input type="file" id="inputAnalyze" accept=".dxf" multiple style="display:none;" />
           </div>
-          <div class="actions-row" style="margin-top:12px;">
+          <div class="file-list" id="analyzeList" style="display:none;"></div>
+          <div class="actions-center">
             <button class="btn primary" id="btnParse">파싱하기</button>
-            <button class="btn" id="btnNext">다음으로</button>
           </div>
-          <div class="muted" style="margin-top:8px;">세부 설정 완료 후 분석 결과 페이지로 이동합니다.</div>
-          <div class="file-list" id="analyzeList"></div>
         </div>
       </div>
-      <div class="layout" style="margin-top:16px;">
-        <div class="card">
+      <div id="detailSection" class="layout" style="margin-top:16px; display:none;">
+        <div class="card" style="grid-column: span 2;">
           <h3>세부 설정</h3>
-          <div class="muted">블록/레이어 역할을 지정하세요.</div>
-          <div class="field">
-            <label>도곽 블록</label>
-            <input class="input" id="blockTitle" placeholder="예: TITLE_BLOCK_A" />
-          </div>
-          <div class="field">
-            <label>레이어 매핑</label>
-            <div style="display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
-              <input class="input" id="layerAxis" placeholder="축선 레이어" />
-              <input class="input" id="layerConcrete" placeholder="콘크리트 레이어" />
-              <input class="input" id="layerSteel" placeholder="철골 구조 레이어" />
-              <input class="input" id="layerWall" placeholder="비구조 벽체 레이어" />
+          <div class="muted">요소에 해당하는 레이어 또는 블록을 지정하세요.</div>
+          <div class="tab-layout">
+            <div class="tab-rail">
+              <button class="btn ghost" data-detail-tab="basic">기본</button>
+              <button class="btn ghost" data-detail-tab="structure">구조 요소</button>
+              <button class="btn ghost" data-detail-tab="nonstruct">비구조 요소</button>
+            </div>
+            <div>
+              <div id="panel-basic" class="tab-panel active">
+                <div class="row-select"><label>도곽</label><div class="smart-select" id="basic-border-layer" data-select-type="layer"></div><div class="smart-select" id="basic-border-block" data-select-type="block"></div></div>
+                <div class="row-select"><label>치수</label><div class="smart-select" id="basic-dim-layer" data-select-type="layer"></div><div class="smart-select" id="basic-dim-block" data-select-type="block"></div></div>
+                <div class="row-select"><label>심볼</label><div class="smart-select" id="basic-symbol-layer" data-select-type="layer"></div><div class="smart-select" id="basic-symbol-block" data-select-type="block"></div></div>
+                <div class="row-select"><label>텍스트</label><div class="smart-select" id="basic-text-layer" data-select-type="layer"></div><div class="smart-select" id="basic-text-block" data-select-type="block"></div></div>
+              </div>
+              <div id="panel-structure" class="tab-panel">
+                <div class="row-select"><label>축선</label><div class="smart-select" id="struct-axis-layer" data-select-type="layer"></div><div class="smart-select" id="struct-axis-block" data-select-type="block"></div></div>
+                <div class="row-select"><label>콘크리트 기둥</label><div class="smart-select" id="struct-ccol-layer" data-select-type="layer"></div><div class="smart-select" id="struct-ccol-block" data-select-type="block"></div></div>
+                <div class="row-select"><label>철골 기둥</label><div class="smart-select" id="struct-scol-layer" data-select-type="layer"></div><div class="smart-select" id="struct-scol-block" data-select-type="block"></div></div>
+                <div class="row-select"><label>콘크리트 벽체</label><div class="smart-select" id="struct-cwall-layer" data-select-type="layer"></div><div class="smart-select" id="struct-cwall-block" data-select-type="block"></div></div>
+                <div class="row-select"><label>슬라브</label><div class="smart-select" id="struct-slab-layer" data-select-type="layer"></div><div class="smart-select" id="struct-slab-block" data-select-type="block"></div></div>
+              </div>
+              <div id="panel-nonstruct" class="tab-panel">
+                <div class="row-select"><label>비내력 벽체</label><div class="smart-select" id="non-wall-layer" data-select-type="layer"></div><div class="smart-select" id="non-wall-block" data-select-type="block"></div></div>
+                <div class="row-select"><label>문</label><div class="smart-select" id="non-door-layer" data-select-type="layer"></div><div class="smart-select" id="non-door-block" data-select-type="block"></div></div>
+                <div class="row-select"><label>창호</label><div class="smart-select" id="non-window-layer" data-select-type="layer"></div><div class="smart-select" id="non-window-block" data-select-type="block"></div></div>
+                <div class="row-select"><label>계단/경사로</label><div class="smart-select" id="non-stair-layer" data-select-type="layer"></div><div class="smart-select" id="non-stair-block" data-select-type="block"></div></div>
+                <div class="row-select"><label>엘리베이터</label><div class="smart-select" id="non-elevator-layer" data-select-type="layer"></div><div class="smart-select" id="non-elevator-block" data-select-type="block"></div></div>
+                <div class="row-select"><label>가구</label><div class="smart-select" id="non-furniture-layer" data-select-type="layer"></div><div class="smart-select" id="non-furniture-block" data-select-type="block"></div></div>
+                <div class="row-select"><label>마감</label><div class="smart-select" id="non-finish-layer" data-select-type="layer"></div><div class="smart-select" id="non-finish-block" data-select-type="block"></div></div>
+              </div>
             </div>
           </div>
-          <div class="actions-row">
+          <div class="actions-center">
             <button class="btn primary" id="btnAnalyze">분석하기</button>
           </div>
         </div>
-        <div class="card">
+      </div>
+      <div id="resultSection" class="layout" style="margin-top:16px; display:none;">
+        <div class="card" style="grid-column: span 2;">
           <h3>분석 결과</h3>
-          <div class="muted">좌측 리스트에서 파일을 선택하면 우측에 결과가 표시됩니다.</div>
-          <div class="layout" style="grid-template-columns: 1fr 1.6fr; gap:12px; margin-top:8px;">
-            <div class="card" style="padding:12px; background: var(--surface-2);">
-              <h4 style="margin:0 0 8px;">파일 리스트</h4>
-              <div id="resultList" class="file-list"></div>
-            </div>
+          <div class="tab-layout" style="margin-top:8px;">
+            <div class="tab-rail" id="resultList"></div>
             <div class="card" style="padding:12px; background: var(--surface-2);">
               <div id="resultView" class="muted">파일을 선택하세요.</div>
             </div>
@@ -574,6 +686,9 @@
       convertFiles: [],
       analyzeFiles: [],
       selectedResult: null,
+      layerOptions: [],
+      blockOptions: [],
+      selectedOptions: {},
     };
 
     function setTab(tab) {
@@ -686,39 +801,42 @@
 
     function renderFileList(kind) {
       const listEl = kind === "convert" ? $("convertList") : $("analyzeList");
+      const dropEl = kind === "convert" ? $("dropConvert") : $("dropAnalyze");
+      const actionStart = kind === "convert" ? $("btnConvertStart") : $("btnParse");
+      const actionDownload = kind === "convert" ? $("btnConvertDownload") : null;
       const files = kind === "convert" ? state.convertFiles : state.analyzeFiles;
       listEl.innerHTML = "";
-      if (files.length === 0) {
-        listEl.innerHTML = '<div class="muted">파일을 추가하세요.</div>';
-        return;
+      const hasFiles = files.length > 0;
+      if (dropEl) dropEl.style.display = hasFiles ? "none" : "block";
+      if (listEl) listEl.style.display = hasFiles ? "flex" : "none";
+      if (actionStart) actionStart.disabled = !hasFiles;
+      if (kind === "convert" && actionDownload) {
+        const anyDone = files.some((f) => f.status === "done");
+        actionDownload.style.display = anyDone ? "inline-flex" : "none";
+        actionDownload.disabled = !anyDone;
       }
+      if (!hasFiles) return;
       files.forEach((file, idx) => {
         const row = document.createElement("div");
         row.className = "file-row";
         row.innerHTML = `
-          <div class="file-main">
-            <div class="file-name">${file.name}</div>
-            <div class="status-line">
-              <span class="status-pill ${file.status}">${file.statusLabel}</span>
-              <span>${file.log}</span>
-            </div>
-          </div>
-          <div>
-            <div class="muted">용량 ${formatSize(file.size)}</div>
-            <div class="muted">진행률 ${file.progress}%</div>
-            <div class="progress"><div class="progress-bar" style="width:${file.progress}%;"></div></div>
-          </div>
-          <div class="actions-row">
-            <button class="btn" data-action="select">선택</button>
-            <button class="btn" data-action="download" ${file.status !== "done" ? "disabled" : ""}>다운로드</button>
-            <button class="btn ghost" data-action="remove">삭제</button>
-          </div>
+          <div class="file-name">${file.name}</div>
+          <div class="muted">${formatSize(file.size)}</div>
+          <div class="status-pill ${file.status}">${file.statusLabel}</div>
+          <div class="progress"><div class="progress-bar" style="width:${file.progress}%;"></div></div>
+          <div class="file-log">${file.log}</div>
+          <button class="btn ghost" data-action="remove" title="삭제">✕</button>
         `;
         row.querySelectorAll("button").forEach((b) =>
           b.addEventListener("click", () => handleFileAction(kind, idx, b.dataset.action))
         );
         listEl.appendChild(row);
       });
+      const addCard = document.createElement("div");
+      addCard.className = "add-card";
+      addCard.textContent = "+ 파일 추가";
+      addCard.onclick = () => (kind === "convert" ? $("inputConvert") : $("inputAnalyze")).click();
+      listEl.appendChild(addCard);
     }
 
     function handleFileAction(kind, idx, action) {
@@ -727,18 +845,19 @@
       if (!file) return;
       if (action === "remove") {
         files.splice(idx, 1);
-      } else if (action === "select") {
-        file.selected = !file.selected;
-        alert(`${file.name} ${file.selected ? "선택" : "선택 해제"}되었습니다.`);
-      } else if (action === "download" && file.status === "done") {
-        alert(`${file.name} 변환본을 다운로드합니다.`);
       }
       renderFileList(kind);
     }
 
     function addFiles(kind, fileList) {
       const target = kind === "convert" ? state.convertFiles : state.analyzeFiles;
+      const allowed = kind === "convert" ? [".dwg"] : [".dxf"];
       Array.from(fileList).forEach((f) => {
+        const ext = (f.name.split(".").pop() || "").toLowerCase();
+        if (!allowed.includes("." + ext)) {
+          alert(`허용된 확장자만 업로드 가능합니다. (${allowed.join(", ")})`);
+          return;
+        }
         target.push({
           name: f.name,
           size: f.size,
@@ -770,6 +889,10 @@
             file.statusLabel = "완료";
             file.log = "완료되었습니다.";
             renderFileList(kind);
+            if (kind === "analyze") {
+              const detail = $("detailSection");
+              if (detail) detail.style.display = "grid";
+            }
             updateResultList();
             return;
           }
@@ -827,13 +950,103 @@
         { status: "processing", label: "파싱 중", log: "ezdxf 기본 파싱 수행", progress: 75 },
         { status: "done", label: "완료", log: "파싱 결과 저장", progress: 100 },
       ]);
+      setDetailTab("basic");
+      if (state.layerOptions.length === 0) {
+        state.layerOptions = ["AXIS", "WALL", "DOOR", "WINDOW", "STAIR", "SLAB", "COLUMN", "TEXT"];
+      }
+      if (state.blockOptions.length === 0) {
+        state.blockOptions = ["TITLE_BLOCK", "DOOR_BLOCK", "WINDOW_BLOCK", "ELEV", "STAIR_BLOCK"];
+      }
+      initSmartSelects();
     };
-    $("btnNext").onclick = () => alert("세부 설정 영역으로 이동했습니다. 설정을 입력한 후 분석하기를 눌러주세요.");
     $("btnAnalyze").onclick = () => {
       if (!state.loggedIn) return alert("로그인 후 이용 가능합니다.");
+      if (state.analyzeFiles.length === 0) return alert("분석할 DXF 파일을 먼저 업로드하세요.");
       alert("지정된 블록/레이어 설정을 기반으로 AI 분석을 실행합니다.");
+      const result = $("resultSection");
+      if (result) result.style.display = "grid";
+      if (!state.selectedResult && state.analyzeFiles.length > 0) {
+        state.selectedResult = state.analyzeFiles[0];
+      }
       updateResultList(true);
     };
+
+    function setDetailTab(tab) {
+      document.querySelectorAll("[data-detail-tab]").forEach((btn) => {
+        const active = btn.dataset.detailTab === tab;
+        btn.classList.toggle("active", active);
+      });
+      document.querySelectorAll(".tab-panel").forEach((panel) => {
+        panel.classList.toggle("active", panel.id === `panel-${tab}`);
+      });
+    }
+    document.querySelectorAll("[data-detail-tab]").forEach((btn) => {
+      btn.addEventListener("click", () => setDetailTab(btn.dataset.detailTab));
+    });
+
+    function initSmartSelects() {
+      const closeAll = () => document.querySelectorAll(".smart-select.open").forEach((s) => s.classList.remove("open"));
+      document.addEventListener("click", (e) => {
+        if (!e.target.closest(".smart-select")) closeAll();
+      });
+      document.querySelectorAll(".smart-select").forEach((container) => {
+        const type = container.dataset.selectType;
+        const id = container.id;
+        const options = type === "layer" ? state.layerOptions : state.blockOptions;
+        container.innerHTML = `
+          <div class="smart-display"><span class="muted">선택하세요</span></div>
+          <div class="smart-dropdown">
+            <input class="smart-search" placeholder="검색..." />
+            <div class="smart-list"></div>
+          </div>
+        `;
+        const display = container.querySelector(".smart-display");
+        const dropdown = container.querySelector(".smart-dropdown");
+        const search = container.querySelector(".smart-search");
+        const list = container.querySelector(".smart-list");
+        const selected = new Set(state.selectedOptions[id] || []);
+
+        const renderList = (keyword = "") => {
+          list.innerHTML = "";
+          options
+            .filter((opt) => opt.toLowerCase().includes(keyword.toLowerCase()))
+            .forEach((opt) => {
+              const row = document.createElement("label");
+              row.className = "smart-option";
+              const chk = document.createElement("input");
+              chk.type = "checkbox";
+              chk.value = opt;
+              chk.checked = selected.has(opt);
+              chk.onchange = () => {
+                if (chk.checked) selected.add(opt);
+                else selected.delete(opt);
+                state.selectedOptions[id] = Array.from(selected);
+                updateDisplay();
+              };
+              row.appendChild(chk);
+              row.appendChild(document.createTextNode(opt));
+              list.appendChild(row);
+            });
+        };
+
+        const updateDisplay = () => {
+          const arr = Array.from(selected);
+          const typeLabel = type === "layer" ? "레이어를 " : "블록을 ";
+          display.textContent = arr.length ? arr.join(", ") : `${typeLabel}선택하세요`;
+        };
+
+        display.onclick = (e) => {
+          e.stopPropagation();
+          const isOpen = container.classList.contains("open");
+          closeAll();
+          if (!isOpen) container.classList.add("open");
+        };
+        search.oninput = () => renderList(search.value);
+
+        renderList();
+        updateDisplay();
+      });
+    }
 
     function updateResultList(forceAdd = false) {
       const list = $("resultList");
@@ -841,33 +1054,34 @@
       if (forceAdd && state.analyzeFiles.length > 0 && !state.selectedResult) {
         state.selectedResult = state.analyzeFiles[0];
       }
-      state.analyzeFiles.forEach((f, idx) => {
-        const item = document.createElement("div");
-        item.className = "file-row";
-        item.style.gridTemplateColumns = "1fr auto";
-        item.innerHTML = `
-          <div>
-            <div class="file-name">${f.name}</div>
-            <div class="muted">진행률 ${f.progress}% · ${f.log}</div>
-          </div>
-          <button class="btn ${state.selectedResult === f ? "primary" : ""}" data-idx="${idx}">보기</button>
-        `;
-        item.querySelector("button").onclick = () => {
-          state.selectedResult = f;
-          updateResultList();
-          renderResultView();
-        };
-        list.appendChild(item);
-      });
       if (state.analyzeFiles.length === 0) {
         list.innerHTML = '<div class="muted">파싱된 파일이 없습니다.</div>';
+      } else {
+        state.analyzeFiles.forEach((f, idx) => {
+          const btn = document.createElement("button");
+          btn.className = "btn ghost";
+          if (state.selectedResult === f) btn.classList.add("active");
+          btn.textContent = f.name;
+          btn.dataset.idx = idx;
+          btn.onclick = () => {
+            state.selectedResult = f;
+            updateResultList();
+            renderResultView();
+          };
+          list.appendChild(btn);
+        });
       }
       renderResultView();
     }
 
     function renderResultView() {
       const view = $("resultView");
-      const file = state.selectedResult;
+      let file = state.selectedResult;
+      if (!file && state.analyzeFiles.length > 0) {
+        file = state.analyzeFiles[0];
+        state.selectedResult = file;
+        updateResultList();
+      }
       if (!file) {
         view.innerHTML = '<div class="muted">분석 결과를 보려면 파일을 선택하세요.</div>';
         return;
@@ -927,6 +1141,10 @@
           body.classList.toggle("open");
         };
       });
+      const basicBody = $("acc-basic");
+      const aiBody = $("acc-ai");
+      if (basicBody) basicBody.classList.add("open");
+      if (aiBody) aiBody.classList.add("open");
     }
 
     setTab("home");
