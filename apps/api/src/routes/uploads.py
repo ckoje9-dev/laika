@@ -9,6 +9,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+import tempfile
+import zipfile
+import tempfile
+import zipfile
 
 from packages.db.src.session import get_session
 from packages.db.src import models as db_models
@@ -39,6 +43,16 @@ class ParseResponse(BaseModel):
     message: str | None = None
     parsed: bool | None = None
     meta_path: str | None = None
+
+
+class BulkDownloadRequest(BaseModel):
+    file_ids: list[str]
+    kind: str = "dxf"
+
+
+class BulkDownloadRequest(BaseModel):
+    file_ids: list[str]
+    kind: str = "dxf"
 
 
 def _infer_type(filename: str) -> str:
@@ -220,6 +234,12 @@ async def get_parsed_preview(
     metadata = _load_jsonl(meta_path)
     table_path = None
     tables = None
+    layers: list[dict] = []
+    blocks: list[dict] = []
+    if metadata:
+        tables_entry = next((m for m in metadata if isinstance(m, dict) and m.get("section") == "tables"), {})
+        layers = tables_entry.get("layers") or []
+        blocks = tables_entry.get("block_records") or []
 
     counts_stmt = (
         select(db_models.DxfEntityRaw.type, func.count())
@@ -263,6 +283,8 @@ async def get_parsed_preview(
         "total": total,
         "entities": entities,
         "meta_path": str(meta_path) if meta_path else None,
+        "layers": layers,
+        "blocks": blocks,
         "tables": tables,
         "tables_path": str(table_path) if table_path else None,
     }
@@ -274,6 +296,28 @@ async def enqueue_parse(file_id: str, session: AsyncSession = Depends(get_sessio
     file_row = await session.get(db_models.File, file_id)
     if not file_row:
         raise HTTPException(status_code=404, detail="file not found")
+
+    # DXF 업로드인데 path_dxf가 비어있는 경우 path_original을 그대로 사용하도록 보정
+    if not file_row.path_dxf and file_row.type == "dxf" and file_row.path_original:
+        file_row.path_dxf = file_row.path_original
+        await session.commit()
+
+    # DWG인 경우 변환이 안된 상태라면 변환+파싱 파이프라인을 큐에 넣는다.
+    if not file_row.path_dxf and file_row.type == "dwg":
+        enqueued = False
+        message: str | None = None
+        try:
+            enqueue("apps.worker.src.jobs.convert_and_parse.run", file_id=file_id)
+            enqueued = True
+            message = "DWG 변환 후 파싱을 위한 파이프라인을 실행했습니다."
+        except Exception as e:  # pragma: no cover - 큐 설정 오류 시 로그를 남기고 반환
+            import logging
+
+            logging.getLogger(__name__).warning("convert_and_parse enqueue 실패: %s", e)
+            message = str(e)
+
+        return ParseResponse(file_id=file_id, enqueued=enqueued, message=message, parsed=None)
+
     if not file_row.path_dxf:
         raise HTTPException(status_code=400, detail="DXF가 아직 생성되지 않았습니다. 변환 완료 후 파싱하세요.")
 
@@ -331,3 +375,34 @@ async def enqueue_parse2(file_id: str, session: AsyncSession = Depends(get_sessi
         message = str(e)
 
     return ParseResponse(file_id=file_id, enqueued=enqueued, message=message, parsed=False)
+
+
+@router.post("/bulk-download")
+async def bulk_download(
+    payload: BulkDownloadRequest, session: AsyncSession = Depends(get_session)
+):
+    if not payload.file_ids:
+        raise HTTPException(status_code=400, detail="file_ids is required")
+
+    paths: list[Path] = []
+    names: list[str] = []
+    for fid in payload.file_ids:
+        file_row = await session.get(db_models.File, fid)
+        if not file_row:
+            continue
+        if payload.kind == "dxf":
+            if file_row.path_dxf and Path(file_row.path_dxf).exists():
+                paths.append(Path(file_row.path_dxf))
+                names.append(Path(file_row.path_dxf).name)
+        elif payload.kind == "original":
+            if file_row.path_original and Path(file_row.path_original).exists():
+                paths.append(Path(file_row.path_original))
+                names.append(Path(file_row.path_original).name)
+    if not paths:
+        raise HTTPException(status_code=404, detail="no files ready")
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    with zipfile.ZipFile(tmp.name, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for p, name in zip(paths, names):
+            zf.write(p, arcname=name)
+    return FileResponse(tmp.name, media_type="application/zip", filename="dxf_bundle.zip")

@@ -14,6 +14,7 @@ from apps.worker.src.jobs import (
     dwg_to_dxf,
     dxf_parse,
     dxf_parse2,
+    convert_and_parse,
     semantic_build,
     index_project,
 )
@@ -30,6 +31,7 @@ JOB_MAP = {
     "dwg_to_dxf": dwg_to_dxf,
     "dxf_parse": dxf_parse,
     "dxf_parse2": dxf_parse2,
+    "convert_and_parse": convert_and_parse,
     "semantic_build": semantic_build,
     "index_project": index_project,
 }

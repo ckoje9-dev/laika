@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
@@ -576,7 +576,7 @@
           <div class="file-list" id="convertList" style="display:none;"></div>
           <div class="actions-center">
             <button class="btn primary" id="btnConvertStart" disabled>변환하기</button>
-            <button class="btn" id="btnConvertDownload" style="display:none;">다운로드</button>
+            <button class="btn" id="btnConvertDownload" style="display:none;">일괄 다운로드</button>
           </div>
         </div>
       </div>
@@ -671,8 +671,10 @@
     </section>
   </main>
 
-  <script>
+    <script>
     const $ = (id) => document.getElementById(id);
+    const API_BASE = window.API_BASE || "http://localhost:8000";
+
     const state = {
       activeTab: "home",
       loggedIn: false,
@@ -683,12 +685,50 @@
         { id: "aaa", pwd: "aaa", role: "user", subscribed: false },
         { id: "bbb", pwd: "bbb", role: "user", subscribed: true },
       ],
+      projectId: null,
       convertFiles: [],
       analyzeFiles: [],
       selectedResult: null,
+      selectedOptions: {},
       layerOptions: [],
       blockOptions: [],
-      selectedOptions: {},
+    };
+
+    const statusCopy = {
+      ready: "준비",
+      uploading: "업로드 중",
+      uploaded: "업로드 완료",
+      processing: "처리 중",
+      converting: "DXF 변환 중",
+      parsing: "파싱 중",
+      done: "완료",
+      failed: "실패",
+    };
+
+    const formatSize = (bytes) => {
+      if (!bytes && bytes !== 0) return "-";
+      const units = ["B", "KB", "MB", "GB"];
+      const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+      const val = bytes / 1024 ** i;
+      return `${val.toFixed(val >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
+    };
+
+    const api = async (path, opts = {}) => {
+      const { method = "GET", body, headers = {} } = opts;
+      const config = { method, headers: { ...headers } };
+      if (body instanceof FormData) {
+        config.body = body;
+      } else if (body !== undefined) {
+        config.body = JSON.stringify(body);
+        config.headers["Content-Type"] = "application/json";
+      }
+      const res = await fetch(`${API_BASE}${path}`, config);
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || res.statusText || "API 오류");
+      }
+      const ct = res.headers.get("content-type") || "";
+      return ct.includes("application/json") ? res.json() : res.text();
     };
 
     function setTab(tab) {
@@ -708,21 +748,9 @@
       state.activeTab = tab;
       document.querySelectorAll(".tab").forEach((el) => el.classList.toggle("active", el.dataset.tab === tab));
       document.querySelectorAll("section").forEach((sec) => sec.classList.toggle("active", sec.id === tab));
-      if ($("analyzeLock")) {
-        $("analyzeLock").style.display = state.loggedIn ? "none" : "inline-flex";
-      }
-      if ($("generateLock")) {
-        $("generateLock").style.display = state.subscribed ? "none" : "inline-flex";
-      }
+      if ($("analyzeLock")) $("analyzeLock").style.display = state.loggedIn ? "none" : "inline-flex";
+      if ($("generateLock")) $("generateLock").style.display = state.subscribed ? "none" : "inline-flex";
     }
-
-    document.querySelectorAll(".tab").forEach((tab) => {
-      tab.addEventListener("click", () => setTab(tab.dataset.tab));
-    });
-    document.querySelectorAll("[data-tab-jump]").forEach((btn) => {
-      btn.addEventListener("click", () => setTab(btn.dataset.tabJump));
-    });
-    $("btnHome").onclick = () => setTab("home");
 
     function updateUserUI() {
       $("userBadge").textContent = state.loggedIn
@@ -744,15 +772,11 @@
 
     function doLogin(id, pwd) {
       const found = state.users.find((u) => u.id === id && u.pwd === pwd);
-      if (!found) {
-        alert("아이디 또는 비밀번호를 확인하세요.");
-        return;
-      }
+      if (!found) return alert("아이디 또는 비밀번호를 확인하세요.");
       state.loggedIn = true;
       state.user = { ...found };
       state.subscribed = !!found.subscribed;
       updateUserUI();
-      alert(`${found.id}님 환영합니다.`);
       setTab("home");
     }
 
@@ -760,76 +784,78 @@
       if (!id || !pwd || !pwd2) return alert("모든 항목을 입력하세요.");
       if (pwd !== pwd2) return alert("비밀번호가 일치하지 않습니다.");
       if (state.users.find((u) => u.id === id)) return alert("이미 존재하는 아이디입니다.");
-      const user = { id, pwd, role: "user", subscribed: false };
-      state.users.push(user);
+      state.users.push({ id, pwd, role: "user", subscribed: false });
       alert("가입이 완료되었습니다. 로그인해주세요.");
       setTab("login");
     }
 
-    $("btnLogin").onclick = () => {
-      if (state.loggedIn) {
-        doLogout();
-      } else {
-        setTab("login");
+    async function ensureProject() {
+      if (state.projectId) return state.projectId;
+      const list = await api("/projects/").catch(() => []);
+      if (Array.isArray(list) && list.length > 0) {
+        state.projectId = list[0].id || list[0].project_id || list[0].projectId;
+        return state.projectId;
       }
-    };
-    $("btnSignup").onclick = () => setTab(state.loggedIn ? "home" : "signup");
+      const created = await api("/projects/", { method: "POST", body: { name: "LAIKA 웹 프로젝트" } });
+      state.projectId = created.id || created.project_id || created.projectId;
+      return state.projectId;
+    }
 
-    $("btnDoLogin").onclick = () => doLogin($("loginId").value.trim(), $("loginPwd").value);
-    $("btnDoSignup").onclick = () => doSignup($("signupId").value.trim(), $("signupPwd").value, $("signupPwd2").value);
-
-    $("btnSubscribe").onclick = () => {
-      if (!state.loggedIn) {
-        alert("로그인 후 구독할 수 있습니다.");
-        return setTab("login");
-      }
-      state.subscribed = true;
-      if (state.user) state.user.subscribed = true;
-      updateUserUI();
-      setTab("generate");
-      alert("구독이 활성화되었습니다. AI 도면 생성 기능을 준비 중입니다.");
-    };
-    $("btnNotify").onclick = () => alert("준비되면 이메일로 안내해드리겠습니다.");
-
-    function formatSize(bytes) {
-      if (!bytes && bytes !== 0) return "-";
-      const sizes = ["B", "KB", "MB", "GB"];
-      const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), sizes.length - 1);
-      const val = bytes / 1024 ** i;
-      return `${val.toFixed(val >= 10 || i === 0 ? 0 : 1)} ${sizes[i]}`;
+    async function createVersion(prefix) {
+      const projectId = await ensureProject();
+      const versions = await api(`/projects/${projectId}/versions`).catch(() => []);
+      const next = (versions?.length || 0) + 1;
+      const created = await api(`/projects/${projectId}/versions`, {
+        method: "POST",
+        body: { label: `${prefix}-${next}` },
+      });
+      return created.id || created.version_id || created.versionId;
     }
 
     function renderFileList(kind) {
       const listEl = kind === "convert" ? $("convertList") : $("analyzeList");
       const dropEl = kind === "convert" ? $("dropConvert") : $("dropAnalyze");
-      const actionStart = kind === "convert" ? $("btnConvertStart") : $("btnParse");
-      const actionDownload = kind === "convert" ? $("btnConvertDownload") : null;
+      const startBtn = kind === "convert" ? $("btnConvertStart") : $("btnParse");
+      const downloadBtn = kind === "convert" ? $("btnConvertDownload") : null;
       const files = kind === "convert" ? state.convertFiles : state.analyzeFiles;
-      listEl.innerHTML = "";
       const hasFiles = files.length > 0;
       if (dropEl) dropEl.style.display = hasFiles ? "none" : "block";
       if (listEl) listEl.style.display = hasFiles ? "flex" : "none";
-      if (actionStart) actionStart.disabled = !hasFiles;
-      if (kind === "convert" && actionDownload) {
-        const anyDone = files.some((f) => f.status === "done");
-        actionDownload.style.display = anyDone ? "inline-flex" : "none";
-        actionDownload.disabled = !anyDone;
+      if (startBtn) startBtn.disabled = !hasFiles;
+      if (downloadBtn) {
+        const anyDone = files.some((f) => f.status === "done" && f.pathDxf);
+        downloadBtn.style.display = anyDone ? "inline-flex" : "none";
+        downloadBtn.disabled = !anyDone;
       }
-      if (!hasFiles) return;
+      if (!hasFiles || !listEl) return;
+      listEl.innerHTML = "";
       files.forEach((file, idx) => {
         const row = document.createElement("div");
         row.className = "file-row";
+        const canDownload = file.status === "done" && file.pathDxf && kind === "convert";
         row.innerHTML = `
           <div class="file-name">${file.name}</div>
           <div class="muted">${formatSize(file.size)}</div>
-          <div class="status-pill ${file.status}">${file.statusLabel}</div>
-          <div class="progress"><div class="progress-bar" style="width:${file.progress}%;"></div></div>
-          <div class="file-log">${file.log}</div>
-          <button class="btn ghost" data-action="remove" title="삭제">✕</button>
+          <div class="status-pill ${file.status}">${file.statusLabel || statusCopy[file.status] || "-"}</div>
+          <div class="progress"><div class="progress-bar" style="width:${file.progress || 0}%;"></div></div>
+          <div class="file-log">${file.log || ""}</div>
+          ${
+            canDownload
+              ? `<button class="btn" data-action="download" title="다운로드">다운로드</button>`
+              : `<button class="btn ghost" data-action="remove" title="삭제">✕</button>`
+          }
         `;
-        row.querySelectorAll("button").forEach((b) =>
-          b.addEventListener("click", () => handleFileAction(kind, idx, b.dataset.action))
-        );
+        row.querySelectorAll("button").forEach((btn) => {
+          const action = btn.dataset.action;
+          btn.onclick = () => {
+            if (action === "download") {
+              window.open(`${API_BASE}/uploads/${file.fileId}/download?kind=dxf`, "_blank");
+              return;
+            }
+            (kind === "convert" ? state.convertFiles : state.analyzeFiles).splice(idx, 1);
+            renderFileList(kind);
+          };
+        });
         listEl.appendChild(row);
       });
       const addCard = document.createElement("div");
@@ -839,79 +865,31 @@
       listEl.appendChild(addCard);
     }
 
-    function handleFileAction(kind, idx, action) {
-      const files = kind === "convert" ? state.convertFiles : state.analyzeFiles;
-      const file = files[idx];
-      if (!file) return;
-      if (action === "remove") {
-        files.splice(idx, 1);
-      }
-      renderFileList(kind);
-    }
-
     function addFiles(kind, fileList) {
+      const allow = kind === "convert" ? [".dwg"] : [".dxf"];
       const target = kind === "convert" ? state.convertFiles : state.analyzeFiles;
-      const allowed = kind === "convert" ? [".dwg"] : [".dxf"];
       Array.from(fileList).forEach((f) => {
-        const ext = (f.name.split(".").pop() || "").toLowerCase();
-        if (!allowed.includes("." + ext)) {
-          alert(`허용된 확장자만 업로드 가능합니다. (${allowed.join(", ")})`);
+        const ext = `.${(f.name.split(".").pop() || "").toLowerCase()}`;
+        if (!allow.includes(ext)) {
+          alert(`${allow.join(", ")} 확장자만 업로드할 수 있습니다.`);
           return;
         }
         target.push({
+          kind,
+          fileObj: f,
           name: f.name,
           size: f.size,
-          progress: 0,
           status: "ready",
-          statusLabel: "준비",
+          statusLabel: statusCopy.ready,
+          progress: 0,
           log: "대기 중",
-          selected: false,
+          fileId: null,
+          pathDxf: null,
+          parsedData: null,
         });
       });
       renderFileList(kind);
     }
-
-    function simulate(kind, statusFlow) {
-      const files = kind === "convert" ? state.convertFiles : state.analyzeFiles;
-      const targets = files.filter((f) => (f.selected || files.every((ff) => !ff.selected)));
-      targets.forEach((file) => {
-        let step = 0;
-        file.progress = 10;
-        file.status = "uploading";
-        file.statusLabel = statusFlow[0].label;
-        file.log = statusFlow[0].log;
-        renderFileList(kind);
-        const tick = () => {
-          step += 1;
-          if (step >= statusFlow.length) {
-            file.progress = 100;
-            file.status = "done";
-            file.statusLabel = "완료";
-            file.log = "완료되었습니다.";
-            renderFileList(kind);
-            if (kind === "analyze") {
-              const detail = $("detailSection");
-              if (detail) detail.style.display = "grid";
-            }
-            updateResultList();
-            return;
-          }
-          const cur = statusFlow[step];
-          file.progress = cur.progress;
-          file.status = cur.status;
-          file.statusLabel = cur.label;
-          file.log = cur.log;
-          renderFileList(kind);
-          setTimeout(tick, 800);
-        };
-        setTimeout(tick, 800);
-      });
-    }
-
-    $("dropConvert").addEventListener("click", () => $("inputConvert").click());
-    $("dropAnalyze").addEventListener("click", () => $("inputAnalyze").click());
-    $("inputConvert").addEventListener("change", (e) => addFiles("convert", e.target.files));
-    $("inputAnalyze").addEventListener("change", (e) => addFiles("analyze", e.target.files));
 
     function bindDropzone(el, kind) {
       ["dragenter", "dragover"].forEach((evt) =>
@@ -928,61 +906,18 @@
       );
       el.addEventListener("drop", (e) => {
         e.preventDefault();
-        const files = e.dataTransfer.files;
-        addFiles(kind, files);
+        addFiles(kind, e.dataTransfer.files);
       });
     }
-    bindDropzone($("dropConvert"), "convert");
-    bindDropzone($("dropAnalyze"), "analyze");
-
-    $("btnConvertStart").onclick = () =>
-      simulate("convert", [
-        { status: "uploading", label: "업로드 중", log: "서버로 전송 중", progress: 30 },
-        { status: "processing", label: "DXF 변환 중", log: "odaconverter 실행", progress: 70 },
-        { status: "done", label: "완료", log: "DXF 생성 완료", progress: 100 },
-      ]);
-    $("btnConvertDownload").onclick = () => alert("완료된 DXF 파일을 다운로드합니다.");
-
-    $("btnParse").onclick = () => {
-      if (!state.loggedIn) return alert("로그인 후 이용 가능합니다.");
-      simulate("analyze", [
-        { status: "uploading", label: "업로드 중", log: "서버로 전송 중", progress: 30 },
-        { status: "processing", label: "파싱 중", log: "ezdxf 기본 파싱 수행", progress: 75 },
-        { status: "done", label: "완료", log: "파싱 결과 저장", progress: 100 },
-      ]);
-      setDetailTab("basic");
-      if (state.layerOptions.length === 0) {
-        state.layerOptions = ["AXIS", "WALL", "DOOR", "WINDOW", "STAIR", "SLAB", "COLUMN", "TEXT"];
-      }
-      if (state.blockOptions.length === 0) {
-        state.blockOptions = ["TITLE_BLOCK", "DOOR_BLOCK", "WINDOW_BLOCK", "ELEV", "STAIR_BLOCK"];
-      }
-      initSmartSelects();
-    };
-    $("btnAnalyze").onclick = () => {
-      if (!state.loggedIn) return alert("로그인 후 이용 가능합니다.");
-      if (state.analyzeFiles.length === 0) return alert("분석할 DXF 파일을 먼저 업로드하세요.");
-      alert("지정된 블록/레이어 설정을 기반으로 AI 분석을 실행합니다.");
-      const result = $("resultSection");
-      if (result) result.style.display = "grid";
-      if (!state.selectedResult && state.analyzeFiles.length > 0) {
-        state.selectedResult = state.analyzeFiles[0];
-      }
-      updateResultList(true);
-    };
 
     function setDetailTab(tab) {
-      document.querySelectorAll("[data-detail-tab]").forEach((btn) => {
-        const active = btn.dataset.detailTab === tab;
-        btn.classList.toggle("active", active);
-      });
-      document.querySelectorAll(".tab-panel").forEach((panel) => {
-        panel.classList.toggle("active", panel.id === `panel-${tab}`);
-      });
+      document.querySelectorAll("[data-detail-tab]").forEach((btn) =>
+        btn.classList.toggle("active", btn.dataset.detailTab === tab)
+      );
+      document.querySelectorAll(".tab-panel").forEach((panel) =>
+        panel.classList.toggle("active", panel.id === `panel-${tab}`)
+      );
     }
-    document.querySelectorAll("[data-detail-tab]").forEach((btn) => {
-      btn.addEventListener("click", () => setDetailTab(btn.dataset.detailTab));
-    });
 
     function initSmartSelects() {
       const closeAll = () => document.querySelectorAll(".smart-select.open").forEach((s) => s.classList.remove("open"));
@@ -992,19 +927,18 @@
       document.querySelectorAll(".smart-select").forEach((container) => {
         const type = container.dataset.selectType;
         const id = container.id;
-        const options = type === "layer" ? state.layerOptions : state.blockOptions;
+        const options = (type === "layer" ? state.layerOptions : state.blockOptions) || [];
+        const selected = new Set(state.selectedOptions[id] || []);
         container.innerHTML = `
-          <div class="smart-display"><span class="muted">선택하세요</span></div>
+          <div class="smart-display"><span class="muted">${type === "layer" ? "레이어를 선택하세요." : "블록을 선택하세요."}</span></div>
           <div class="smart-dropdown">
             <input class="smart-search" placeholder="검색..." />
             <div class="smart-list"></div>
           </div>
         `;
         const display = container.querySelector(".smart-display");
-        const dropdown = container.querySelector(".smart-dropdown");
         const search = container.querySelector(".smart-search");
         const list = container.querySelector(".smart-list");
-        const selected = new Set(state.selectedOptions[id] || []);
 
         const renderList = (keyword = "") => {
           list.innerHTML = "";
@@ -1031,8 +965,12 @@
 
         const updateDisplay = () => {
           const arr = Array.from(selected);
-          const typeLabel = type === "layer" ? "레이어를 " : "블록을 ";
-          display.textContent = arr.length ? arr.join(", ") : `${typeLabel}선택하세요`;
+          display.textContent =
+            arr.length > 0
+              ? arr.join(", ")
+              : type === "layer"
+              ? "레이어를 선택하세요."
+              : "블록을 선택하세요.";
         };
 
         display.onclick = (e) => {
@@ -1048,72 +986,238 @@
       });
     }
 
-    function updateResultList(forceAdd = false) {
+    async function uploadOne(file, versionId) {
+      if (file.fileId) return file.fileId;
+      file.status = "uploading";
+      file.statusLabel = statusCopy.uploading;
+      file.progress = 15;
+      file.log = "서버로 업로드 중";
+      renderFileList(file.kind);
+      const fd = new FormData();
+      fd.append("version_id", versionId);
+      fd.append("file", file.fileObj);
+      const resp = await api("/uploads/upload", { method: "POST", body: fd });
+      file.fileId = resp.file_id || resp.id || resp.fileId;
+      file.status = "uploaded";
+      file.statusLabel = statusCopy.uploaded;
+      file.progress = 40;
+      file.log = "업로드 완료";
+      renderFileList(file.kind);
+      return file.fileId;
+    }
+
+    async function pollStatus(file, mode) {
+      return new Promise((resolve) => {
+        const loop = async () => {
+          try {
+            const res = await api(`/uploads/${file.fileId}/status`);
+            const st = (res.status || "").toLowerCase();
+            if (st.includes("fail") || st.includes("error")) {
+              file.status = "failed";
+              file.statusLabel = statusCopy.failed;
+              file.progress = 100;
+              file.log = res.message || "실패했습니다.";
+              renderFileList(file.kind);
+              return resolve(false);
+            }
+            const isDone = st === "done" || st === "completed" || st === "success" || res.path_dxf || res.path_original;
+            if (isDone && (mode !== "convert" || res.path_dxf)) {
+              file.status = "done";
+              file.statusLabel = statusCopy.done;
+              file.progress = 100;
+              file.log = res.message || "완료되었습니다.";
+              file.pathDxf = res.path_dxf || res.upload_path || res.storage_path || file.pathDxf;
+              renderFileList(file.kind);
+              if (mode === "analyze") {
+                await loadParsed(file).catch(() => {});
+                $("detailSection").style.display = "grid";
+                $("resultSection").style.display = "grid";
+              }
+              return resolve(true);
+            }
+            file.status = mode === "convert" ? "processing" : "parsing";
+            file.statusLabel = mode === "convert" ? statusCopy.converting : statusCopy.parsing;
+            file.progress = mode === "convert" ? 70 : 80;
+            file.log = res.message || (mode === "convert" ? "변환 중" : "파싱 중");
+            renderFileList(file.kind);
+            setTimeout(loop, 1200);
+          } catch (err) {
+            file.status = "failed";
+            file.statusLabel = statusCopy.failed;
+            file.progress = 100;
+            file.log = err.message || "상태 조회 실패";
+            renderFileList(file.kind);
+            resolve(false);
+          }
+        };
+        loop();
+      });
+    }
+
+    async function startConvert() {
+      if (state.convertFiles.length === 0) return alert("업로드할 DWG 파일을 선택하세요.");
+      const btn = $("btnConvertStart");
+      if (btn) btn.disabled = true;
+      const versionId = await createVersion("conv").catch((e) => {
+        alert("버전 생성에 실패했습니다. " + e.message);
+        if (btn) btn.disabled = false;
+      });
+      if (!versionId) return;
+      for (const file of state.convertFiles) {
+        try {
+          await uploadOne(file, versionId);
+          await api(`/uploads/${file.fileId}/convert`, { method: "POST" });
+          await pollStatus(file, "convert");
+        } catch (err) {
+          file.status = "failed";
+          file.statusLabel = statusCopy.failed;
+          file.log = err.message || "변환 실패";
+          renderFileList("convert");
+        }
+      }
+      if (btn) btn.disabled = false;
+    }
+
+    async function loadParsed(file) {
+      if (!file?.fileId) return;
+      const data = await api(`/uploads/${file.fileId}/parsed`);
+      file.parsedData = data;
+      const layerNames = (data.layers || data.layer_table || []).map((l) => l.name || l.layer || l) || state.layerOptions;
+      const blockNames = (data.blocks || data.block_table || []).map((b) => b.name || b.block_name || b) || state.blockOptions;
+      if (layerNames.length) state.layerOptions = layerNames;
+      if (blockNames.length) state.blockOptions = blockNames;
+      initSmartSelects();
+      updateResultList(true);
+      renderResultView();
+    }
+
+    async function startParse() {
+      if (!state.loggedIn) {
+        alert("로그인 후 이용 가능합니다.");
+        return setTab("login");
+      }
+      if (state.analyzeFiles.length === 0) return alert("분석할 DXF 파일을 먼저 업로드하세요.");
+      const btn = $("btnParse");
+      if (btn) btn.disabled = true;
+      const versionId = await createVersion("parse").catch((e) => {
+        alert("버전 생성에 실패했습니다. " + e.message);
+        if (btn) btn.disabled = false;
+      });
+      if (!versionId) return;
+      for (const file of state.analyzeFiles) {
+        try {
+          await uploadOne(file, versionId);
+          await api(`/uploads/${file.fileId}/parse`, { method: "POST" });
+          await pollStatus(file, "analyze");
+        } catch (err) {
+          file.status = "failed";
+          file.statusLabel = statusCopy.failed;
+          file.log = err.message || "파싱 실패";
+          renderFileList("analyze");
+        }
+      }
+      if ($("detailSection")) $("detailSection").style.display = "grid";
+      if (btn) btn.disabled = false;
+    }
+
+    function updateResultList(forceSelect = false) {
       const list = $("resultList");
+      if (!list) return;
       list.innerHTML = "";
-      if (forceAdd && state.analyzeFiles.length > 0 && !state.selectedResult) {
+      if (forceSelect && state.analyzeFiles.length > 0 && !state.selectedResult) {
         state.selectedResult = state.analyzeFiles[0];
       }
       if (state.analyzeFiles.length === 0) {
         list.innerHTML = '<div class="muted">파싱된 파일이 없습니다.</div>';
-      } else {
-        state.analyzeFiles.forEach((f, idx) => {
-          const btn = document.createElement("button");
-          btn.className = "btn ghost";
-          if (state.selectedResult === f) btn.classList.add("active");
-          btn.textContent = f.name;
-          btn.dataset.idx = idx;
-          btn.onclick = () => {
-            state.selectedResult = f;
-            updateResultList();
-            renderResultView();
-          };
-          list.appendChild(btn);
-        });
+        return;
       }
-      renderResultView();
+      state.analyzeFiles.forEach((f) => {
+        const btn = document.createElement("button");
+        btn.className = "btn ghost";
+        if (state.selectedResult === f) btn.classList.add("active");
+        btn.textContent = f.name;
+        btn.onclick = () => {
+          state.selectedResult = f;
+          updateResultList();
+          if (!f.parsedData && f.fileId) loadParsed(f);
+          else renderResultView();
+        };
+        list.appendChild(btn);
+      });
     }
 
     function renderResultView() {
       const view = $("resultView");
-      let file = state.selectedResult;
-      if (!file && state.analyzeFiles.length > 0) {
-        file = state.analyzeFiles[0];
-        state.selectedResult = file;
-        updateResultList();
-      }
+      if (!view) return;
+      const file = state.selectedResult;
       if (!file) {
         view.innerHTML = '<div class="muted">분석 결과를 보려면 파일을 선택하세요.</div>';
         return;
       }
+      if (!file.parsedData) {
+        view.innerHTML = '<div class="muted">분석 결과를 불러오는 중입니다...</div>';
+        return;
+      }
+      const data = file.parsedData;
+      const counts = data.counts || data.metadata?.counts || {};
+      const layers = data.layers || data.layer_table || [];
+      const blocks = data.blocks || data.block_table || [];
+      const entities = data.entities || data.entity_table || [];
+      const entityRows = entities.slice(0, 10).map(
+        (e, i) =>
+          `<tr><td>${e.id || i + 1}</td><td>${e.type || e.TYPE || "-"}</td><td>${e.layer || e.LAYER || "-"}</td><td>${
+            e.text || e.TEXT || "-"
+          }</td><td>${(e.coords || e.coordinates || []).join(" ") || "-"}</td></tr>`
+      );
+
       view.innerHTML = `
         <div class="pill">AI 도면 분석 결과</div>
-        <h3 style="margin:8px 0 6px;">파일: ${file.name} / 단위: mm</h3>
+        <h3 style="margin:8px 0 6px;">파일: ${file.name} / 단위: ${data.unit || "mm"}</h3>
         <div class="card" style="padding:12px; background: rgba(0,0,0,0.15); margin:8px 0;">도면 미리보기 영역 (SVG 뷰어 자리)</div>
         <div class="accordion">
           <div class="acc-header" data-acc="basic">DXF 기본 파싱 내용</div>
           <div class="acc-body" id="acc-basic">
-            <div class="muted">총 엔티티 120EA (LINE: 30, POLYLINE: 25, TEXT: 18 ...)</div>
+            <div class="muted">총 엔티티 ${counts.total || entities.length || 0}EA</div>
             <div class="actions-row" style="margin:8px 0;">
-              <button class="btn">JSON 다운로드</button>
-              <button class="btn">CSV 다운로드</button>
+              <button class="btn" onclick="window.open('${API_BASE}/uploads/${file.fileId}/parsed')">JSON 다운로드</button>
+              <button class="btn" onclick="alert('CSV 다운로드 API가 준비되면 연결합니다.')">CSV 다운로드</button>
             </div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>레이어명</th><th>색상</th></tr></thead>
-                <tbody><tr><td>AXIS</td><td>#00ff99</td></tr><tr><td>WALL</td><td>#cccccc</td></tr></tbody>
+                <tbody>
+                  ${
+                    layers.length
+                      ? layers
+                          .slice(0, 15)
+                          .map((l) => `<tr><td>${l.name || l.layer || "-"}</td><td>${l.color || "-"}</td></tr>`)
+                          .join("")
+                      : "<tr><td colspan='2'>레이어 정보 없음</td></tr>"
+                  }
+                </tbody>
               </table>
             </div>
             <div class="table-wrap" style="margin-top:8px;">
               <table>
                 <thead><tr><th>블록명</th><th>개수</th></tr></thead>
-                <tbody><tr><td>TITLE_BLOCK</td><td>4</td></tr></tbody>
+                <tbody>
+                  ${
+                    blocks.length
+                      ? blocks
+                          .slice(0, 15)
+                          .map((b) => `<tr><td>${b.name || b.block_name || "-"}</td><td>${b.count || b.total || "-"}</td></tr>`)
+                          .join("")
+                      : "<tr><td colspan='2'>블록 정보 없음</td></tr>"
+                  }
+                </tbody>
               </table>
             </div>
             <div class="table-wrap" style="margin-top:8px;">
               <table>
                 <thead><tr><th>ID</th><th>TYPE</th><th>LAYER</th><th>TEXT</th><th>Coordinates</th></tr></thead>
-                <tbody><tr><td>1</td><td>LINE</td><td>AXIS</td><td>-</td><td>[0,0],[10,0]</td></tr></tbody>
+                <tbody>
+                  ${entityRows.length ? entityRows.join("") : "<tr><td colspan='5'>엔티티 정보 없음</td></tr>"}
+                </tbody>
               </table>
             </div>
           </div>
@@ -1123,32 +1227,99 @@
           <div class="acc-body" id="acc-ai">
             <div class="muted">세부 설정에 따라 도출된 분석 리포트가 여기에 표시됩니다.</div>
             <div class="actions-row" style="margin:8px 0;">
-              <button class="btn">JSON 다운로드</button>
-              <button class="btn">CSV 다운로드</button>
+              <button class="btn" onclick="alert('AI 결과 JSON 다운로드 API가 준비되면 연결합니다.')">JSON 다운로드</button>
+              <button class="btn" onclick="alert('AI 결과 CSV 다운로드 API가 준비되면 연결합니다.')">CSV 다운로드</button>
             </div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>항목</th><th>값</th></tr></thead>
-                <tbody><tr><td>도곽 블록</td><td>${$("blockTitle").value || "미지정"}</td></tr></tbody>
+                <tbody><tr><td>도곽 블록</td><td>${(state.selectedOptions["basic-border-block"] || []).join(", ") || "미지정"}</td></tr></tbody>
               </table>
             </div>
           </div>
         </div>
       `;
+
       document.querySelectorAll(".acc-header").forEach((h) => {
         h.onclick = () => {
           const body = $("acc-" + h.dataset.acc);
           body.classList.toggle("open");
         };
       });
-      const basicBody = $("acc-basic");
-      const aiBody = $("acc-ai");
-      if (basicBody) basicBody.classList.add("open");
-      if (aiBody) aiBody.classList.add("open");
+      $("acc-basic")?.classList.add("open");
+      $("acc-ai")?.classList.add("open");
+    }
+
+    function bindEvents() {
+      document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => setTab(tab.dataset.tab)));
+      document.querySelectorAll("[data-tab-jump]").forEach((btn) =>
+        btn.addEventListener("click", () => setTab(btn.dataset.tabJump))
+      );
+      $("btnHome").onclick = () => setTab("home");
+      $("btnLogin").onclick = () => (state.loggedIn ? doLogout() : setTab("login"));
+      $("btnSignup").onclick = () => setTab(state.loggedIn ? "home" : "signup");
+      $("btnDoLogin").onclick = () => doLogin($("loginId").value.trim(), $("loginPwd").value);
+      $("btnDoSignup").onclick = () => doSignup($("signupId").value.trim(), $("signupPwd").value, $("signupPwd2").value);
+      $("btnSubscribe").onclick = () => {
+        if (!state.loggedIn) {
+          alert("로그인 후 구독할 수 있습니다.");
+          return setTab("login");
+        }
+        state.subscribed = true;
+        if (state.user) state.user.subscribed = true;
+        updateUserUI();
+        alert("구독이 활성화되었습니다.");
+      };
+      $("btnNotify").onclick = () => alert("준비되면 이메일로 안내해드리겠습니다.");
+      $("dropConvert").addEventListener("click", () => $("inputConvert").click());
+      $("dropAnalyze").addEventListener("click", () => $("inputAnalyze").click());
+      $("inputConvert").addEventListener("change", (e) => addFiles("convert", e.target.files));
+      $("inputAnalyze").addEventListener("change", (e) => addFiles("analyze", e.target.files));
+      bindDropzone($("dropConvert"), "convert");
+      bindDropzone($("dropAnalyze"), "analyze");
+      $("btnConvertStart").onclick = startConvert;
+      $("btnConvertDownload").onclick = async () => {
+        const doneFiles = state.convertFiles.filter((f) => f.status === "done" && f.pathDxf);
+        if (doneFiles.length === 0) return alert("완료된 DXF가 없습니다.");
+        try {
+          const res = await fetch(`${API_BASE}/uploads/bulk-download`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ file_ids: doneFiles.map((f) => f.fileId), kind: "dxf" }),
+          });
+          if (!res.ok) {
+            const msg = await res.text();
+            throw new Error(msg || "다운로드 실패");
+          }
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "dxf_bundle.zip";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          alert(e.message || "다운로드 중 오류가 발생했습니다.");
+        }
+      };
+      $("btnParse").onclick = startParse;
+      $("btnAnalyze").onclick = () => {
+        if (!state.loggedIn) return alert("로그인 후 이용 가능합니다.");
+        if (state.analyzeFiles.length === 0) return alert("분석할 DXF 파일을 먼저 업로드하세요.");
+        $("resultSection").style.display = "grid";
+        updateResultList(true);
+        renderResultView();
+      };
+      document.querySelectorAll("[data-detail-tab]").forEach((btn) =>
+        btn.addEventListener("click", () => setDetailTab(btn.dataset.detailTab))
+      );
     }
 
     setTab("home");
     updateUserUI();
+    bindEvents();
   </script>
 </body>
 </html>
