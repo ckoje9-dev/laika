@@ -1,570 +1,936 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Laika 파이프라인 테스트 패널</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LAIKA</title>
   <style>
     :root {
-      --bg: #0f172a;
-      --card: #111827;
-      --accent: #38bdf8;
-      --text: #e5e7eb;
-      --muted: #9ca3af;
-      --error: #f87171;
-      --success: #34d399;
-      --border: #1f2937;
+      --bg: #0c1018;
+      --surface: #0f1724;
+      --surface-2: #111b2c;
+      --border: #1f2c3e;
+      --accent: #6df3c3;
+      --accent-2: #61a8ff;
+      --text: #e6edf7;
+      --muted: #9fb3ce;
+      --error: #ff6b6b;
+      --success: #6df3c3;
+      --warn: #f2c84b;
+      --shadow: 0 20px 60px rgba(0,0,0,0.35);
+      --radius: 14px;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 24px;
-      font-family: "Segoe UI", "Noto Sans KR", sans-serif;
-      background: radial-gradient(circle at 20% 20%, #1e293b, #0b1223 55%), var(--bg);
+      font-family: "Pretendard", "Noto Sans KR", "Segoe UI", sans-serif;
+      background: radial-gradient(120% 120% at 20% 0%, rgba(97,168,255,0.08), transparent 40%), radial-gradient(120% 120% at 80% 20%, rgba(109,243,195,0.08), transparent 45%), #060910;
+      color: var(--text);
+      min-height: 100vh;
+      padding: 0 20px 48px;
+    }
+    a { color: inherit; text-decoration: none; }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(12px);
+      background: rgba(6, 9, 16, 0.9);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 6px;
+      max-width: 1200px;
+      margin: 0 auto;
+      gap: 16px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      letter-spacing: 0.6px;
+      cursor: pointer;
+    }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: grid;
+      place-items: center;
+      color: #0a0f17;
+      font-weight: 900;
+      font-size: 16px;
+      box-shadow: 0 10px 30px rgba(109,243,195,0.25);
+    }
+    .tabs {
+      display: flex;
+      gap: 12px;
+      flex: 1;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .tab {
+      padding: 10px 18px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(17, 27, 44, 0.7);
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-weight: 600;
+    }
+    .tab.active {
+      color: #0a0f17;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 10px 25px rgba(109,243,195,0.25);
+      border-color: transparent;
+    }
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .badge {
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: rgba(97,168,255,0.12);
+      border: 1px solid var(--border);
+      font-size: 12px;
       color: var(--text);
     }
-    h1 { margin: 0 0 8px; font-size: 28px; }
-    p { margin: 4px 0 16px; color: var(--muted); }
-    .grid {
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn.primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #0a0f17;
+      border: none;
+      box-shadow: 0 14px 40px rgba(97,168,255,0.25);
+    }
+    .btn.ghost { background: transparent; }
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    main {
+      max-width: 1200px;
+      margin: 24px auto 0;
+    }
+    section {
+      display: none;
+      animation: fadeIn 0.35s ease;
+    }
+    section.active { display: block; }
+    .hero {
+      background: linear-gradient(145deg, rgba(17,27,44,0.75), rgba(7,11,19,0.95));
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 32px;
+      box-shadow: var(--shadow);
+    }
+    .hero h1 { margin: 0 0 12px; font-size: 28px; }
+    .hero p { margin: 4px 0 14px; color: var(--muted); }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: rgba(97,168,255,0.12);
+      color: var(--text);
+      font-size: 12px;
+      border: 1px solid var(--border);
+    }
+    .layout {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-template-columns: 1.2fr 1fr;
       gap: 16px;
       margin-top: 16px;
     }
     .card {
-      background: linear-gradient(145deg, #0b1223, #0f172a);
+      background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: var(--shadow);
     }
-    .card h2 { margin: 0 0 8px; font-size: 18px; }
-    label { display: block; margin: 8px 0 4px; color: var(--muted); font-size: 13px; }
-    input {
+    .card h3 { margin: 0 0 10px; font-size: 18px; }
+    .muted { color: var(--muted); font-size: 14px; margin: 6px 0 12px; }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .field label { color: var(--muted); font-size: 13px; }
+    .input {
       width: 100%;
-      padding: 10px;
-      border-radius: 8px;
+      padding: 12px;
+      border-radius: 12px;
       border: 1px solid var(--border);
-      background: #0b1223;
+      background: var(--surface-2);
       color: var(--text);
       font-size: 14px;
     }
-    button {
-      margin-top: 12px;
-      padding: 10px 14px;
-      border: none;
-      border-radius: 8px;
-      background: var(--accent);
-      color: #0b1223;
-      font-weight: 600;
+    .dropzone {
+      border: 1.5px dashed var(--border);
+      border-radius: 14px;
+      padding: 26px;
+      text-align: center;
+      background: rgba(17,27,44,0.5);
+      transition: all 0.2s ease;
       cursor: pointer;
-      width: 100%;
     }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
-    .note { font-size: 13px; color: var(--muted); margin-top: 6px; }
-    .log {
-      background: #0b1223;
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: rgba(109,243,195,0.08);
+      box-shadow: 0 10px 30px rgba(109,243,195,0.15);
+    }
+    .file-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+    .file-row {
+      background: var(--surface-2);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px;
-      max-height: 240px;
-      overflow: auto;
-      font-family: "SFMono-Regular", Consolas, monospace;
-      font-size: 12px;
-      white-space: pre-wrap;
+      border-radius: 12px;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 1.3fr 1fr 0.9fr;
+      gap: 10px;
+      align-items: center;
     }
-    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
-    .pill.success { background: rgba(52,211,153,0.15); color: var(--success); }
-    .pill.error { background: rgba(248,113,113,0.15); color: var(--error); }
-    .pill.pending { background: rgba(56,189,248,0.15); color: var(--accent); }
-    .chip { display: inline-block; padding: 4px 8px; border-radius: 999px; background: rgba(56,189,248,0.12); color: var(--text); margin: 2px; font-size: 12px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
-    th, td { border: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
-    th { background: #111827; position: sticky; top: 0; z-index: 1; }
-    .table-wrap { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
-    .code-inline { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; background: #0b1223; padding: 4px 6px; border-radius: 6px; display: inline-block; max-width: 360px; white-space: pre-wrap; }
+    .file-main { display: flex; flex-direction: column; gap: 6px; }
+    .file-name { font-weight: 700; }
+    .progress {
+      width: 100%;
+      height: 10px;
+      border-radius: 12px;
+      background: rgba(31,44,62,0.8);
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width 0.25s ease;
+    }
+    .status-line {
+      font-size: 13px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .status-pill {
+      padding: 4px 8px;
+      border-radius: 8px;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .status-pill.ready { color: var(--text); }
+    .status-pill.uploading { color: var(--accent-2); border-color: rgba(97,168,255,0.4); }
+    .status-pill.processing { color: var(--accent); border-color: rgba(109,243,195,0.4); }
+    .status-pill.done { color: var(--success); border-color: rgba(109,243,195,0.5); }
+    .status-pill.failed { color: var(--error); border-color: rgba(255,107,107,0.5); }
+    .actions-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .accordion {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--surface-2);
+      margin-top: 12px;
+    }
+    .acc-header {
+      padding: 12px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      background: rgba(255,255,255,0.02);
+    }
+    .acc-body {
+      padding: 14px;
+      border-top: 1px solid var(--border);
+      display: none;
+    }
+    .acc-body.open { display: block; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px;
+      text-align: left;
+      color: var(--text);
+    }
+    th { background: rgba(255,255,255,0.03); }
+    .table-wrap {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: auto;
+      max-height: 260px;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .pill-success { color: var(--success); }
+    .pill-warn { color: var(--warn); }
+    .pill-error { color: var(--error); }
+    .capsule {
+      background: rgba(97,168,255,0.1);
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      border-radius: 12px;
+      margin-bottom: 10px;
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+      color: var(--text);
+    }
+    .pill-lock {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.03);
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 960px) {
+      .layout { grid-template-columns: 1fr; }
+      .file-row { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
-  <h1>Laika 파이프라인 테스트 패널</h1>
-  <p>프로젝트 이름만 입력하고 DWG를 올리면, 버전 라벨(v1, v2...)을 자동으로 붙여서 변환/파싱을 실행합니다.</p>
-  <div class="card" style="margin-bottom: 12px;">
-    <h2>환경 설정</h2>
-    <label>API Base URL</label>
-    <input id="apiBase" value="http://localhost:8000" />
-    <div class="note">docker-compose 기본 포트는 8000입니다.</div>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <h2>프로젝트</h2>
-      <label>프로젝트 이름</label><input id="projectName" placeholder="예: 우리동네 주거동" />
-      <button id="createProject">프로젝트 생성</button>
-      <div class="note">project_id: <span id="projectIdDisplay" class="pill"></span></div>
+  <header>
+    <div class="nav">
+      <div class="brand" id="btnHome">
+        <div class="brand-mark">L</div>
+        <div>
+          <div style="font-size:14px; color: var(--muted);">AI 도면 플랫폼</div>
+          <div style="font-size:16px;">LAIKA</div>
+        </div>
+      </div>
+      <div class="tabs">
+        <div class="tab" data-tab="convert">DXF 변환</div>
+        <div class="tab" data-tab="analyze">AI 도면 분석</div>
+        <div class="tab" data-tab="generate">AI 도면 생성</div>
+      </div>
+      <div class="nav-actions">
+        <div class="badge" id="userBadge">게스트 · 비로그인</div>
+        <button class="btn ghost" id="btnSignup">회원가입</button>
+        <button class="btn ghost" id="btnLogin">로그인</button>
+      </div>
     </div>
+  </header>
 
-    <div class="card">
-      <h2>DWG 업로드</h2>
-      <input id="fileInput" type="file" accept=".dwg" multiple />
-      <button id="uploadDwgs">선택한 DWG 업로드</button>
-      <div class="note">업로드 시 자동으로 새 버전 라벨(v1, v2...)을 생성합니다.</div>
-      <div class="note">이번 배치 버전 라벨: <span id="versionLabelDisplay" class="pill"></span></div>
-    </div>
-  </div>
+  <main>
+    <section id="home" class="active">
+      <div class="hero">
+        <div class="pill">LAIKA · Intelligent Drawing Automation</div>
+        <h1>DWG/DXF 파이프라인을 한 곳에서.<br />업로드·분석·생성을 모두 자동화하세요.</h1>
+        <p>DWG → DXF 변환, AI 기반 도면 분석, 도면 생성까지 하나의 워크플로우로 제공합니다. 업로드만 하면 버전 관리와 파싱, 분석 결과 시각화가 이어집니다.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+          <button class="btn primary" data-tab-jump="convert">DXF 변환 시작</button>
+          <button class="btn" data-tab-jump="analyze">AI 도면 분석 보기</button>
+          <div class="pill-lock">로그인 시 AI 도면 분석 가능 · 구독 시 AI 도면 생성 활성화</div>
+        </div>
+      </div>
+      <div class="layout" style="margin-top:18px;">
+        <div class="card">
+          <h3>LAIKA가 하는 일</h3>
+          <div class="muted">업로드 → 변환 → 파싱 → 분석 → 생성까지 이어지는 여정을 미리 확인하세요.</div>
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <div class="capsule"><span class="pill-success">1</span>DWG를 DXF로 변환 (odaconverter)</div>
+            <div class="capsule"><span class="pill-success">2</span>기본 파싱 (ezdxf) · 엔티티/레이어/블록 DB 적재</div>
+            <div class="capsule"><span class="pill-warn">3</span>블록/레이어 역할 지정 · 축선/구조체/도곽 설정</div>
+            <div class="capsule"><span class="pill-warn">4</span>AI 분석 실행 · 결과 표/다이아그램 다운로드</div>
+            <div class="capsule"><span class="pill-error">5</span>구독 시 AI 도면 생성(Coming soon)</div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>접근 권한</h3>
+          <div class="muted">페이지별 이용 조건입니다.</div>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <div class="tag"><span class="pill-success">공개</span> DXF 변환 · 누구나 사용</div>
+            <div class="tag"><span class="pill-warn">로그인 필요</span> AI 도면 분석 · 회원만</div>
+            <div class="tag"><span class="pill-error">구독 필요</span> AI 도면 생성 · 결제 구독자 전용</div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-    <div class="card" style="margin-top:16px;">
-      <h2>업로드/작업 목록</h2>
-      <div class="note">DWG를 업로드하면 자동 버전(v1,v2,...)이 생성되고, 변환 완료 후 DXF 다운로드 및 파싱을 실행할 수 있습니다.</div>
-      <div id="fileList"></div>
-    </div>
+    <section id="login">
+      <div class="hero">
+        <div class="pill">로그인</div>
+        <h1>다시 만나서 반가워요</h1>
+        <p>테스트 계정: admin/admin(관리자, 구독), aaa/aaa(회원), bbb/bbb(회원+구독)</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <span class="capsule">admin / admin · 관리자 · 구독</span>
+          <span class="capsule">aaa / aaa · 일반 · 미구독</span>
+          <span class="capsule">bbb / bbb · 일반 · 구독</span>
+        </div>
+      </div>
+      <div class="layout">
+        <div class="card" style="grid-column: span 2;">
+          <h3>로그인 폼</h3>
+          <div class="field">
+            <label>아이디</label>
+            <input class="input" id="loginId" placeholder="아이디" />
+          </div>
+          <div class="field">
+            <label>비밀번호</label>
+            <input class="input" id="loginPwd" placeholder="비밀번호" type="password" />
+          </div>
+          <div class="actions-row">
+            <button class="btn primary" id="btnDoLogin">로그인</button>
+            <button class="btn" data-tab-jump="signup">회원가입으로 이동</button>
+          </div>
+        </div>
+      </div>
+    </section>
 
-  <div class="card" style="margin-top:16px;">
-    <h2>파싱 결과 미리보기</h2>
-    <div id="parsedResult" class="note">파일을 선택하고 "파싱 결과" 버튼을 눌러 확인하세요.</div>
-  </div>
+    <section id="signup">
+      <div class="hero">
+        <div class="pill">회원가입</div>
+        <h1>새 계정을 만들어보세요</h1>
+        <p>회원가입 후 AI 도면 분석을 이용할 수 있습니다. 구독은 로그인 후 "구독하기" 버튼으로 전환하세요.</p>
+      </div>
+      <div class="layout">
+        <div class="card" style="grid-column: span 2;">
+          <h3>회원가입 폼</h3>
+          <div class="field">
+            <label>아이디</label>
+            <input class="input" id="signupId" placeholder="아이디" />
+          </div>
+          <div class="field">
+            <label>비밀번호</label>
+            <input class="input" id="signupPwd" placeholder="비밀번호" type="password" />
+          </div>
+          <div class="field">
+            <label>비밀번호 확인</label>
+            <input class="input" id="signupPwd2" placeholder="비밀번호 확인" type="password" />
+          </div>
+          <div class="actions-row">
+            <button class="btn primary" id="btnDoSignup">가입하기</button>
+            <button class="btn" data-tab-jump="login">로그인으로 이동</button>
+          </div>
+        </div>
+      </div>
+    </section>
 
-  <div class="card" style="margin-top:16px;">
-    <h2>로그</h2>
-    <div id="log" class="log"></div>
-  </div>
+    <section id="convert">
+      <div class="hero">
+        <div class="pill">STEP 1 · DXF 변환기</div>
+        <h1>DWG를 DXF로 변환하세요</h1>
+        <p>최대 100MB 파일을 업로드하고 변환 현황을 실시간으로 확인하세요.</p>
+        <div class="muted">상태 로그: 준비 → 업로드 중 → DXF 변환 중 → 완료 · 실패</div>
+      </div>
+      <div class="layout">
+        <div class="card" style="grid-column: span 2;">
+          <h3>파일 업로드 · 작업 제어</h3>
+          <div class="muted">DWG를 추가하고 바로 변환/다운로드를 실행하세요.</div>
+          <div class="dropzone" id="dropConvert">
+            <div style="font-size:15px; font-weight:700;">파일 선택 또는 여기로 드롭 (최대 100MB)</div>
+            <div class="muted" style="margin-top:6px;">DWG 지원 · 변환 결과는 동일한 파일명으로 DXF 다운로드</div>
+            <input type="file" id="inputConvert" accept=".dwg" multiple style="display:none;" />
+          </div>
+          <div class="actions-row" style="margin-top:12px;">
+            <button class="btn primary" id="btnConvertStart">변환하기</button>
+            <button class="btn" id="btnConvertDownload">다운로드</button>
+          </div>
+          <div class="muted" style="margin-top:8px;">선택된 파일이 없으면 전체 변환을 실행합니다.</div>
+          <div class="file-list" id="convertList"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="analyze">
+      <div class="hero">
+        <div class="pill">STEP 2 · AI 도면 분석기</div>
+        <h1>AI로 DXF 도면을 분석하세요</h1>
+        <p>업로드 후 기본 파싱(ezdxf) → 블록/레이어 지정 → 분석 결과 확인까지 한 흐름으로 진행됩니다.</p>
+        <div class="muted">상태 로그: 준비 → 업로드 중 → 파싱 중 → 완료 · 실패</div>
+        <div id="analyzeLock" class="pill-lock" style="margin-top:8px;">로그인 시 이용 가능합니다.</div>
+      </div>
+      <div class="layout">
+        <div class="card" style="grid-column: span 2;">
+          <h3>파일 업로드 · 분석 단계</h3>
+          <div class="muted">DXF를 추가하고 기본 파싱/다음 단계로 바로 진행하세요.</div>
+          <div class="dropzone" id="dropAnalyze">
+            <div style="font-size:15px; font-weight:700;">파일 선택 또는 여기로 드롭 (최대 100MB)</div>
+            <div class="muted" style="margin-top:6px;">DXF 지원 · 업로드 후 기본 파싱</div>
+            <input type="file" id="inputAnalyze" accept=".dxf" multiple style="display:none;" />
+          </div>
+          <div class="actions-row" style="margin-top:12px;">
+            <button class="btn primary" id="btnParse">파싱하기</button>
+            <button class="btn" id="btnNext">다음으로</button>
+          </div>
+          <div class="muted" style="margin-top:8px;">세부 설정 완료 후 분석 결과 페이지로 이동합니다.</div>
+          <div class="file-list" id="analyzeList"></div>
+        </div>
+      </div>
+      <div class="layout" style="margin-top:16px;">
+        <div class="card">
+          <h3>세부 설정</h3>
+          <div class="muted">블록/레이어 역할을 지정하세요.</div>
+          <div class="field">
+            <label>도곽 블록</label>
+            <input class="input" id="blockTitle" placeholder="예: TITLE_BLOCK_A" />
+          </div>
+          <div class="field">
+            <label>레이어 매핑</label>
+            <div style="display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+              <input class="input" id="layerAxis" placeholder="축선 레이어" />
+              <input class="input" id="layerConcrete" placeholder="콘크리트 레이어" />
+              <input class="input" id="layerSteel" placeholder="철골 구조 레이어" />
+              <input class="input" id="layerWall" placeholder="비구조 벽체 레이어" />
+            </div>
+          </div>
+          <div class="actions-row">
+            <button class="btn primary" id="btnAnalyze">분석하기</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>분석 결과</h3>
+          <div class="muted">좌측 리스트에서 파일을 선택하면 우측에 결과가 표시됩니다.</div>
+          <div class="layout" style="grid-template-columns: 1fr 1.6fr; gap:12px; margin-top:8px;">
+            <div class="card" style="padding:12px; background: var(--surface-2);">
+              <h4 style="margin:0 0 8px;">파일 리스트</h4>
+              <div id="resultList" class="file-list"></div>
+            </div>
+            <div class="card" style="padding:12px; background: var(--surface-2);">
+              <div id="resultView" class="muted">파일을 선택하세요.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="generate">
+      <div class="hero">
+        <div class="pill">STEP 3 · AI 도면 생성</div>
+        <h1>AI 도면 생성 (준비중)</h1>
+        <p>구독 결제 후 사용할 수 있는 기능입니다. 요구 사항을 알려주시면 반영하겠습니다.</p>
+        <div id="generateLock" class="pill-lock" style="margin-top:8px;">구독 결제 시 활성화됩니다.</div>
+        <div class="actions-row" style="margin-top:12px;">
+          <button class="btn primary" id="btnSubscribe">구독하기</button>
+          <button class="btn" id="btnNotify">알림받기</button>
+        </div>
+      </div>
+    </section>
+  </main>
 
   <script>
     const $ = (id) => document.getElementById(id);
-    const apiBaseInput = $("apiBase");
-    const logBox = $("log");
-    const projectName = $("projectName");
-    const projectIdDisplay = $("projectIdDisplay");
-    const fileInput = $("fileInput");
-    const versionLabelDisplay = $("versionLabelDisplay");
-    const fileList = $("fileList");
-    // 프로젝트 목록 패널 삽입 (앵커가 없으면 body 끝에 붙임)
-    (function insertProjectList() {
-      const projectListEl = document.createElement("div");
-      projectListEl.className = "card";
-      projectListEl.style.marginTop = "16px";
-      projectListEl.innerHTML = `<h2>프로젝트 목록</h2><div id="projectList"></div>`;
-      const anchor = document.querySelector(".card:nth-of-type(3)") || document.body.lastElementChild;
-      if (anchor && anchor.parentNode) {
-        anchor.parentNode.insertBefore(projectListEl, anchor);
-      } else {
-        document.body.appendChild(projectListEl);
-      }
-    })();
-
     const state = {
-      projects: [],
-      selectedProjectId: null,
-      rows: [], // {projectId, fileId, filename, versionLabel, uploadPath, status, message, progress, pathDxf}
-      versionCounters: {}, // projectId -> latest number
-      currentParsed: null, // {fileId, metadata, counts, entities, total, meta_path}
+      activeTab: "home",
+      loggedIn: false,
+      subscribed: false,
+      user: null,
+      users: [
+        { id: "admin", pwd: "admin", role: "admin", subscribed: true },
+        { id: "aaa", pwd: "aaa", role: "user", subscribed: false },
+        { id: "bbb", pwd: "bbb", role: "user", subscribed: true },
+      ],
+      convertFiles: [],
+      analyzeFiles: [],
+      selectedResult: null,
     };
 
-    function log(line, type = "info") {
-      const stamp = new Date().toLocaleTimeString();
-      const row = document.createElement("div");
-      row.textContent = `[${stamp}] ${line}`;
-      row.className = `log-line ${type}`;
-      logBox.prepend(row);
-    }
-
-    async function api(path, opts = {}) {
-      const base = apiBaseInput.value.replace(/\/$/, "");
-      const res = await fetch(base + path, {
-        ...opts,
-      });
-      const text = await res.text();
-      let data = null;
-      try { data = text ? JSON.parse(text) : null; } catch (_) {}
-      if (!res.ok) {
-        const msg = data?.detail || res.statusText || "API error";
-        throw new Error(msg);
+    function setTab(tab) {
+      if (tab === "analyze" && !state.loggedIn) {
+        alert("AI 도면 분석은 로그인 후 이용 가능합니다.");
+        tab = "login";
       }
-      return data;
-    }
-
-    async function fetchProjects() {
-      try {
-        const projects = await api("/projects/");
-        state.projects = projects;
-        if (!state.selectedProjectId && projects.length > 0) {
-          state.selectedProjectId = projects[0].id;
-        }
-        await fetchProjectDetails(state.selectedProjectId);
-        renderProjects();
-        renderFiles();
-      } catch (e) {
-        log(`프로젝트 조회 실패: ${e.message}`, "error");
-      }
-    }
-
-    async function fetchProjectDetails(projectId) {
-      if (!projectId) return;
-      try {
-        const versions = await api(`/projects/${projectId}/versions/`);
-        const files = await api(`/projects/${projectId}/files/`);
-        const versionNum = versions.length;
-        state.versionCounters[projectId] = versionNum;
-        versionLabelDisplay.textContent = `v${versionNum + 1}`;
-        state.currentParsed = null;
-        renderParsed();
-
-        // 파일 rows 갱신: 해당 프로젝트 것만 교체
-        state.rows = state.rows.filter((r) => r.projectId !== projectId);
-        files.forEach((f) => {
-          state.rows.push({
-            projectId,
-            fileId: f.id,
-            filename: f.path_original ? f.path_original.split("/").pop() : f.id,
-            versionLabel: f.version_label || "-",
-            uploadPath: f.path_original,
-            pathDxf: f.path_dxf,
-            status: f.path_dxf ? "success" : "uploaded",
-            message: "",
-            progress: f.path_dxf ? 100 : 0,
-          });
-        });
-      } catch (e) {
-        log(`프로젝트 상세 조회 실패: ${e.message}`, "error");
-      }
-    }
-
-    function renderProjects() {
-      const list = document.getElementById("projectList");
-      if (!list) return;
-      list.innerHTML = "";
-      if (state.projects.length === 0) {
-        list.innerHTML = '<div class="note">생성된 프로젝트가 없습니다.</div>';
-        return;
-      }
-      state.projects.forEach((p) => {
-        const card = document.createElement("div");
-        card.className = "card";
-        card.style.cursor = "pointer";
-        card.style.marginBottom = "8px";
-        card.style.border = state.selectedProjectId === p.id ? "1px solid var(--accent)" : "1px solid var(--border)";
-        card.innerHTML = `
-          <div><strong>${p.name}</strong></div>
-          <div class="note">${p.id}</div>
-        `;
-        card.onclick = async () => {
-          state.selectedProjectId = p.id;
-          projectIdDisplay.textContent = p.id;
-          await fetchProjectDetails(p.id);
-          renderProjects();
-          renderFiles();
-        };
-        list.appendChild(card);
-      });
-    }
-
-    function renderFiles() {
-      if (!fileList) return;
-      fileList.innerHTML = "";
-      const rows = state.rows.filter((r) => r.projectId === state.selectedProjectId);
-      if (rows.length === 0) {
-        fileList.innerHTML = '<div class="note">업로드된 DWG가 없습니다. 파일을 업로드하세요.</div>';
-        return;
-      }
-      rows.forEach((row, idx) => {
-        const card = document.createElement("div");
-        card.className = "card";
-        card.style.marginBottom = "8px";
-
-        const downloadLink = row.pathDxf
-          ? `<a href="${apiBaseInput.value.replace(/\/$/, '')}/uploads/${row.fileId}/download" target="_blank" class="linkish">DXF 다운로드</a>`
-          : '<span class="note">DXF 미생성</span>';
-
-        const parseDisabled = row.status !== "success" || !row.pathDxf;
-
-        card.innerHTML = `
-         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-           <div>
-             <div><strong>${row.filename}</strong> <span class="pill">${row.versionLabel}</span></div>
-             <div class="note">file_id: ${row.fileId || "-"}</div>
-           </div>
-           <div style="display:flex; gap:8px; flex-wrap:wrap;">
-             <button data-action="convert" data-idx="${idx}" ${row.status === "converting" ? "disabled" : ""}>변환</button>
-             <button data-action="parse" data-idx="${idx}" ${parseDisabled ? "disabled" : ""}>파싱</button>
-              <button data-action="show" data-idx="${idx}" ${row.pathDxf ? "" : "disabled"}>결과 보기</button>
-           </div>
-         </div>
-          <div style="margin-top:8px;">
-            <div class="note">상태: <span class="pill ${row.status}">${row.status}</span> ${row.message ? "(" + row.message + ")" : ""}</div>
-            <div class="note">업로드 경로: ${row.uploadPath || "-"}</div>
-            <div class="note">DXF: ${downloadLink}</div>
-          </div>
-          <div class="progress" style="margin-top:8px; height:8px; background:#1f2937; border-radius:6px; overflow:hidden;">
-            <div style="height:100%; width:${row.progress || 0}%; background:${row.status === "failed" ? "var(--error)" : "var(--accent)"}; transition: width 0.3s;"></div>
-          </div>
-        `;
-        fileList.appendChild(card);
-      });
-
-      fileList.querySelectorAll("button").forEach((btn) => {
-        btn.onclick = () => {
-          const idx = Number(btn.dataset.idx);
-          const action = btn.dataset.action;
-          const rows = state.rows.filter((r) => r.projectId === state.selectedProjectId);
-          const row = rows[idx];
-          const globalIdx = state.rows.findIndex((r) => r.fileId === row.fileId);
-          if (action === "convert") startConvert(globalIdx);
-          if (action === "parse") startParse(globalIdx);
-          if (action === "show") viewParsed(globalIdx);
-        };
-      });
-    }
-
-    $("createProject").onclick = async () => {
-      try {
-        const payload = { name: projectName.value || "demo project" };
-        const data = await api("/projects/", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        log(`프로젝트 생성 성공: ${data.id}`, "success");
-        await fetchProjects();
-      } catch (e) {
-        log(`프로젝트 생성 실패: ${e.message}`, "error");
-      }
-    };
-
-    $("uploadDwgs").onclick = async () => {
-      try {
-        if (!state.selectedProjectId) throw new Error("먼저 프로젝트를 선택하거나 생성하세요.");
-        if (!fileInput.files || fileInput.files.length === 0) throw new Error("DWG 파일을 선택하세요.");
-
-        const currentCount = state.versionCounters[state.selectedProjectId] || 0;
-        const versionLabel = `v${currentCount + 1}`;
-        versionLabelDisplay.textContent = versionLabel;
-
-        // 버전 생성
-        const version = await api(`/projects/${state.selectedProjectId}/versions/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ label: versionLabel }),
-        });
-        state.versionCounters[state.selectedProjectId] = currentCount + 1;
-        log(`버전 생성: ${versionLabel} (${version.id})`, "success");
-
-        // 파일 업로드
-        for (const file of fileInput.files) {
-          const form = new FormData();
-          form.append("version_id", version.id);
-          form.append("file", file);
-          const data = await api("/uploads/upload", { method: "POST", body: form });
-          state.rows.push({
-            projectId: state.selectedProjectId,
-            filename: file.name,
-            versionLabel,
-            fileId: data.file_id,
-            uploadPath: data.upload_path,
-            status: "uploaded",
-            message: "",
-            progress: 0,
-          });
-          log(`업로드 완료: ${file.name} (file_id=${data.file_id})`, "success");
-        }
-        fileInput.value = "";
-        renderFiles();
-      } catch (e) {
-        log(`업로드 실패: ${e.message}`, "error");
-      }
-    };
-
-    async function startConvert(idx) {
-      const row = state.rows[idx];
-      if (!row?.fileId) return;
-      row.status = "converting";
-      row.progress = 20;
-      renderFiles();
-      try {
-        await api(`/uploads/${row.fileId}/convert`, { method: "POST" });
-        log(`변환 요청: ${row.filename}`, "info");
-        pollStatus(idx, { target: "convert" });
-      } catch (e) {
-        row.status = "failed";
-        row.message = e.message;
-        renderFiles();
-        log(`변환 실패: ${row.filename} (${e.message})`, "error");
-      }
-    }
-
-    async function startParse(idx) {
-      const row = state.rows[idx];
-      if (!row?.fileId) return;
-      if (row.status !== "success" || !row.pathDxf) {
-        log("DXF 변환이 완료된 후 파싱할 수 있습니다.", "error");
-        return;
-      }
-      row.status = "parsing";
-      row.progress = 20;
-      renderFiles();
-      try {
-        await api(`/uploads/${row.fileId}/parse`, { method: "POST" });
-        log(`파싱 요청: ${row.filename}`, "info");
-        pollStatus(idx, { target: "parse" });
-      } catch (e) {
-        row.status = "failed";
-        row.message = e.message;
-        renderFiles();
-        log(`파싱 실패: ${row.filename} (${e.message})`, "error");
-      }
-    }
-
-    async function pollStatus(idx, options = {}) {
-      const row = state.rows[idx];
-      if (!row?.fileId) return;
-      try {
-        const data = await api(`/uploads/${row.fileId}/status`);
-        row.status = data.status;
-        row.message = data.message || "";
-        row.pathDxf = data.path_dxf || row.pathDxf;
-        if (data.status === "pending") {
-          row.progress = Math.min((row.progress || 10) + 10, 90);
-          renderFiles();
-          setTimeout(() => pollStatus(idx, options), 2000);
-        } else if (data.status === "success") {
-          row.progress = 100;
-          renderFiles();
-          log(`${options.target === "parse" ? "파싱" : "변환"} 완료: ${row.filename}`, "success");
-          if (options.target === "parse") {
-            await viewParsed(idx);
-          }
+      if (tab === "generate" && (!state.loggedIn || !state.subscribed)) {
+        if (!state.loggedIn) {
+          alert("AI 도면 생성은 로그인 후 이용 가능합니다.");
+          tab = "login";
         } else {
-          row.progress = 100;
-          renderFiles();
-          log(`${options.target === "parse" ? "파싱" : "변환"} 실패: ${row.filename} (${row.message})`, "error");
+          alert("AI 도면 생성은 구독 후 이용 가능합니다.");
+          tab = "generate";
         }
-      } catch (e) {
-        log(`상태 조회 실패: ${e.message}`, "error");
+      }
+      state.activeTab = tab;
+      document.querySelectorAll(".tab").forEach((el) => el.classList.toggle("active", el.dataset.tab === tab));
+      document.querySelectorAll("section").forEach((sec) => sec.classList.toggle("active", sec.id === tab));
+      if ($("analyzeLock")) {
+        $("analyzeLock").style.display = state.loggedIn ? "none" : "inline-flex";
+      }
+      if ($("generateLock")) {
+        $("generateLock").style.display = state.subscribed ? "none" : "inline-flex";
       }
     }
 
-    async function viewParsed(idx) {
-      const row = state.rows[idx];
-      if (!row?.fileId) return;
-      try {
-        const data = await api(`/uploads/${row.fileId}/parsed`);
-        state.currentParsed = { ...data, filename: row.filename };
-        renderParsed();
-        log(`파싱 결과 조회: ${row.filename}`, "info");
-      } catch (e) {
-        log(`파싱 결과 조회 실패: ${e.message}`, "error");
-      }
+    document.querySelectorAll(".tab").forEach((tab) => {
+      tab.addEventListener("click", () => setTab(tab.dataset.tab));
+    });
+    document.querySelectorAll("[data-tab-jump]").forEach((btn) => {
+      btn.addEventListener("click", () => setTab(btn.dataset.tabJump));
+    });
+    $("btnHome").onclick = () => setTab("home");
+
+    function updateUserUI() {
+      $("userBadge").textContent = state.loggedIn
+        ? `${state.user.id} · ${state.subscribed ? "구독" : "회원"}${state.user.role === "admin" ? " · 관리자" : ""}`
+        : "게스트 · 비로그인";
+      $("btnLogin").textContent = state.loggedIn ? "로그아웃" : "로그인";
+      $("btnSignup").textContent = state.loggedIn ? "계정" : "회원가입";
+      if ($("generateLock")) $("generateLock").style.display = state.subscribed ? "none" : "inline-flex";
+      if ($("analyzeLock")) $("analyzeLock").style.display = state.loggedIn ? "none" : "inline-flex";
     }
 
-    function renderParsed() {
-      const box = $("parsedResult");
-      if (!box) return;
-      const data = state.currentParsed;
-      if (!data) {
-        box.innerHTML = '<div class="note">파일을 선택하고 "파싱 결과"를 눌러주세요.</div>';
+    function doLogout() {
+      state.loggedIn = false;
+      state.subscribed = false;
+      state.user = null;
+      updateUserUI();
+      setTab("home");
+    }
+
+    function doLogin(id, pwd) {
+      const found = state.users.find((u) => u.id === id && u.pwd === pwd);
+      if (!found) {
+        alert("아이디 또는 비밀번호를 확인하세요.");
         return;
       }
+      state.loggedIn = true;
+      state.user = { ...found };
+      state.subscribed = !!found.subscribed;
+      updateUserUI();
+      alert(`${found.id}님 환영합니다.`);
+      setTab("home");
+    }
 
-      const documentMeta = (data.metadata || []).find((m) => m.section === "document");
-      const headerMeta = (data.metadata || []).find((m) => m.section === "header");
-      const tablesMeta = (data.metadata || []).find((m) => m.section === "tables");
-      const layoutsMeta = (data.metadata || []).find((m) => m.section === "layouts");
-      const structure = null;
+    function doSignup(id, pwd, pwd2) {
+      if (!id || !pwd || !pwd2) return alert("모든 항목을 입력하세요.");
+      if (pwd !== pwd2) return alert("비밀번호가 일치하지 않습니다.");
+      if (state.users.find((u) => u.id === id)) return alert("이미 존재하는 아이디입니다.");
+      const user = { id, pwd, role: "user", subscribed: false };
+      state.users.push(user);
+      alert("가입이 완료되었습니다. 로그인해주세요.");
+      setTab("login");
+    }
 
-      const renderKeyValueTable = (title, obj) => {
-        if (!obj) return `<div class="note">${title}: 데이터 없음</div>`;
-        const rows = Object.entries(obj)
-          .filter(([k]) => k !== "section")
-          .map(([k, v]) => `<tr><th>${k}</th><td><div class="code-inline">${JSON.stringify(v, null, 2)}</div></td></tr>`)
-          .join("");
-        return `
-          <h3 style="margin-top:12px;">${title}</h3>
-          <div class="table-wrap">
-            <table><tbody>${rows}</tbody></table>
+    $("btnLogin").onclick = () => {
+      if (state.loggedIn) {
+        doLogout();
+      } else {
+        setTab("login");
+      }
+    };
+    $("btnSignup").onclick = () => setTab(state.loggedIn ? "home" : "signup");
+
+    $("btnDoLogin").onclick = () => doLogin($("loginId").value.trim(), $("loginPwd").value);
+    $("btnDoSignup").onclick = () => doSignup($("signupId").value.trim(), $("signupPwd").value, $("signupPwd2").value);
+
+    $("btnSubscribe").onclick = () => {
+      if (!state.loggedIn) {
+        alert("로그인 후 구독할 수 있습니다.");
+        return setTab("login");
+      }
+      state.subscribed = true;
+      if (state.user) state.user.subscribed = true;
+      updateUserUI();
+      setTab("generate");
+      alert("구독이 활성화되었습니다. AI 도면 생성 기능을 준비 중입니다.");
+    };
+    $("btnNotify").onclick = () => alert("준비되면 이메일로 안내해드리겠습니다.");
+
+    function formatSize(bytes) {
+      if (!bytes && bytes !== 0) return "-";
+      const sizes = ["B", "KB", "MB", "GB"];
+      const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), sizes.length - 1);
+      const val = bytes / 1024 ** i;
+      return `${val.toFixed(val >= 10 || i === 0 ? 0 : 1)} ${sizes[i]}`;
+    }
+
+    function renderFileList(kind) {
+      const listEl = kind === "convert" ? $("convertList") : $("analyzeList");
+      const files = kind === "convert" ? state.convertFiles : state.analyzeFiles;
+      listEl.innerHTML = "";
+      if (files.length === 0) {
+        listEl.innerHTML = '<div class="muted">파일을 추가하세요.</div>';
+        return;
+      }
+      files.forEach((file, idx) => {
+        const row = document.createElement("div");
+        row.className = "file-row";
+        row.innerHTML = `
+          <div class="file-main">
+            <div class="file-name">${file.name}</div>
+            <div class="status-line">
+              <span class="status-pill ${file.status}">${file.statusLabel}</span>
+              <span>${file.log}</span>
+            </div>
+          </div>
+          <div>
+            <div class="muted">용량 ${formatSize(file.size)}</div>
+            <div class="muted">진행률 ${file.progress}%</div>
+            <div class="progress"><div class="progress-bar" style="width:${file.progress}%;"></div></div>
+          </div>
+          <div class="actions-row">
+            <button class="btn" data-action="select">선택</button>
+            <button class="btn" data-action="download" ${file.status !== "done" ? "disabled" : ""}>다운로드</button>
+            <button class="btn ghost" data-action="remove">삭제</button>
           </div>
         `;
-      };
+        row.querySelectorAll("button").forEach((b) =>
+          b.addEventListener("click", () => handleFileAction(kind, idx, b.dataset.action))
+        );
+        listEl.appendChild(row);
+      });
+    }
 
-      const renderListTable = (title, items = [], columns = []) => {
-        if (!items || items.length === 0) return `<div class="note">${title}: 데이터 없음</div>`;
-        const header = columns.map((c) => `<th>${c}</th>`).join("");
-        const rows = items
-          .map((item) => `<tr>${columns.map((c) => `<td>${JSON.stringify(item?.[c] ?? "-", null, 2)}</td>`).join("")}</tr>`)
-          .join("");
-        return `
-          <h3 style="margin-top:12px;">${title}</h3>
-          <div class="table-wrap">
-            <table>
-              <thead><tr>${header}</tr></thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </div>
-        `;
-      };
+    function handleFileAction(kind, idx, action) {
+      const files = kind === "convert" ? state.convertFiles : state.analyzeFiles;
+      const file = files[idx];
+      if (!file) return;
+      if (action === "remove") {
+        files.splice(idx, 1);
+      } else if (action === "select") {
+        file.selected = !file.selected;
+        alert(`${file.name} ${file.selected ? "선택" : "선택 해제"}되었습니다.`);
+      } else if (action === "download" && file.status === "done") {
+        alert(`${file.name} 변환본을 다운로드합니다.`);
+      }
+      renderFileList(kind);
+    }
 
-      const counts = data.counts || {};
-      const countChips = Object.keys(counts).length
-        ? Object.entries(counts)
-            .map(([k, v]) => `<span class="chip">${k}: ${v}</span>`)
-            .join("")
-        : '<div class="note">엔티티가 없습니다.</div>';
+    function addFiles(kind, fileList) {
+      const target = kind === "convert" ? state.convertFiles : state.analyzeFiles;
+      Array.from(fileList).forEach((f) => {
+        target.push({
+          name: f.name,
+          size: f.size,
+          progress: 0,
+          status: "ready",
+          statusLabel: "준비",
+          log: "대기 중",
+          selected: false,
+        });
+      });
+      renderFileList(kind);
+    }
 
-      const entities = (data.entities || [])
-        .map(
-          (e) => `
-            <tr>
-              <td>${e.id}</td>
-              <td>${e.type}</td>
-              <td>${e.layer || "-"}</td>
-              <td>${e.length ?? "-"}</td>
-              <td>${e.area ?? "-"}</td>
-              <td><div class="code-inline">${JSON.stringify(e.properties || {}, null, 2)}</div></td>
-            </tr>
-          `
-        )
-        .join("");
-
-      box.innerHTML = `
-        <div class="note">파일: ${data.filename || data.file_id || "-"} / 총 엔티티: ${data.total ?? 0} / 메타: ${data.meta_path || "-"}</div>
-        <div style="margin:8px 0;">${countChips}</div>
-        ${renderKeyValueTable("파일/문서", documentMeta)}
-        ${renderKeyValueTable("HEADER 섹션", headerMeta)}
-        ${
-          tablesMeta
-            ? [
-                renderListTable("TABLES - LAYERS", tablesMeta.layers, ["name", "color_index", "true_color", "linetype", "is_on", "is_locked", "is_plottable"]),
-                renderListTable("TABLES - LINETYPES", tablesMeta.linetypes, ["name", "length", "pattern"]),
-                renderListTable("TABLES - TEXT_STYLES", tablesMeta.text_styles, ["name", "font", "height", "width_factor", "oblique"]),
-                renderListTable("TABLES - DIMENSION_STYLES", tablesMeta.dim_styles, ["name", "arrow_size", "text_height", "unit_format", "tolerance"]),
-                renderListTable("TABLES - BLOCK_RECORDS", tablesMeta.block_records, ["name", "entity_count", "insert_count", "description", "base_point"]),
-              ].join("")
-            : '<div class="note">TABLES 섹션: 데이터 없음</div>'
-        }
-        ${
-          layoutsMeta
-            ? renderListTable(
-                "PaperSpace / Layouts",
-                layoutsMeta.layouts,
-                ["name", "scale", "tab_order", "unit_factor", "plot_layout_flags", "viewports"]
-              )
-            : '<div class="note">PaperSpace / Layouts: 데이터 없음</div>'
-        }
-        <h3 style="margin-top:12px;">엔티티 미리보기 (전체)</h3>
-        <div class="table-wrap">
-          ${
-            entities
-              ? `<table>
-                  <thead>
-                    <tr><th>ID</th><th>Type</th><th>Layer</th><th>Length</th><th>Area</th><th>Properties</th></tr>
-                  </thead>
-                  <tbody>${entities}</tbody>
-                </table>`
-              : '<div class="note" style="padding:8px;">표시할 엔티티가 없습니다.</div>'
+    function simulate(kind, statusFlow) {
+      const files = kind === "convert" ? state.convertFiles : state.analyzeFiles;
+      const targets = files.filter((f) => (f.selected || files.every((ff) => !ff.selected)));
+      targets.forEach((file) => {
+        let step = 0;
+        file.progress = 10;
+        file.status = "uploading";
+        file.statusLabel = statusFlow[0].label;
+        file.log = statusFlow[0].log;
+        renderFileList(kind);
+        const tick = () => {
+          step += 1;
+          if (step >= statusFlow.length) {
+            file.progress = 100;
+            file.status = "done";
+            file.statusLabel = "완료";
+            file.log = "완료되었습니다.";
+            renderFileList(kind);
+            updateResultList();
+            return;
           }
+          const cur = statusFlow[step];
+          file.progress = cur.progress;
+          file.status = cur.status;
+          file.statusLabel = cur.label;
+          file.log = cur.log;
+          renderFileList(kind);
+          setTimeout(tick, 800);
+        };
+        setTimeout(tick, 800);
+      });
+    }
+
+    $("dropConvert").addEventListener("click", () => $("inputConvert").click());
+    $("dropAnalyze").addEventListener("click", () => $("inputAnalyze").click());
+    $("inputConvert").addEventListener("change", (e) => addFiles("convert", e.target.files));
+    $("inputAnalyze").addEventListener("change", (e) => addFiles("analyze", e.target.files));
+
+    function bindDropzone(el, kind) {
+      ["dragenter", "dragover"].forEach((evt) =>
+        el.addEventListener(evt, (e) => {
+          e.preventDefault();
+          el.classList.add("dragover");
+        })
+      );
+      ["dragleave", "drop"].forEach((evt) =>
+        el.addEventListener(evt, (e) => {
+          e.preventDefault();
+          el.classList.remove("dragover");
+        })
+      );
+      el.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const files = e.dataTransfer.files;
+        addFiles(kind, files);
+      });
+    }
+    bindDropzone($("dropConvert"), "convert");
+    bindDropzone($("dropAnalyze"), "analyze");
+
+    $("btnConvertStart").onclick = () =>
+      simulate("convert", [
+        { status: "uploading", label: "업로드 중", log: "서버로 전송 중", progress: 30 },
+        { status: "processing", label: "DXF 변환 중", log: "odaconverter 실행", progress: 70 },
+        { status: "done", label: "완료", log: "DXF 생성 완료", progress: 100 },
+      ]);
+    $("btnConvertDownload").onclick = () => alert("완료된 DXF 파일을 다운로드합니다.");
+
+    $("btnParse").onclick = () => {
+      if (!state.loggedIn) return alert("로그인 후 이용 가능합니다.");
+      simulate("analyze", [
+        { status: "uploading", label: "업로드 중", log: "서버로 전송 중", progress: 30 },
+        { status: "processing", label: "파싱 중", log: "ezdxf 기본 파싱 수행", progress: 75 },
+        { status: "done", label: "완료", log: "파싱 결과 저장", progress: 100 },
+      ]);
+    };
+    $("btnNext").onclick = () => alert("세부 설정 영역으로 이동했습니다. 설정을 입력한 후 분석하기를 눌러주세요.");
+    $("btnAnalyze").onclick = () => {
+      if (!state.loggedIn) return alert("로그인 후 이용 가능합니다.");
+      alert("지정된 블록/레이어 설정을 기반으로 AI 분석을 실행합니다.");
+      updateResultList(true);
+    };
+
+    function updateResultList(forceAdd = false) {
+      const list = $("resultList");
+      list.innerHTML = "";
+      if (forceAdd && state.analyzeFiles.length > 0 && !state.selectedResult) {
+        state.selectedResult = state.analyzeFiles[0];
+      }
+      state.analyzeFiles.forEach((f, idx) => {
+        const item = document.createElement("div");
+        item.className = "file-row";
+        item.style.gridTemplateColumns = "1fr auto";
+        item.innerHTML = `
+          <div>
+            <div class="file-name">${f.name}</div>
+            <div class="muted">진행률 ${f.progress}% · ${f.log}</div>
+          </div>
+          <button class="btn ${state.selectedResult === f ? "primary" : ""}" data-idx="${idx}">보기</button>
+        `;
+        item.querySelector("button").onclick = () => {
+          state.selectedResult = f;
+          updateResultList();
+          renderResultView();
+        };
+        list.appendChild(item);
+      });
+      if (state.analyzeFiles.length === 0) {
+        list.innerHTML = '<div class="muted">파싱된 파일이 없습니다.</div>';
+      }
+      renderResultView();
+    }
+
+    function renderResultView() {
+      const view = $("resultView");
+      const file = state.selectedResult;
+      if (!file) {
+        view.innerHTML = '<div class="muted">분석 결과를 보려면 파일을 선택하세요.</div>';
+        return;
+      }
+      view.innerHTML = `
+        <div class="pill">AI 도면 분석 결과</div>
+        <h3 style="margin:8px 0 6px;">파일: ${file.name} / 단위: mm</h3>
+        <div class="card" style="padding:12px; background: rgba(0,0,0,0.15); margin:8px 0;">도면 미리보기 영역 (SVG 뷰어 자리)</div>
+        <div class="accordion">
+          <div class="acc-header" data-acc="basic">DXF 기본 파싱 내용</div>
+          <div class="acc-body" id="acc-basic">
+            <div class="muted">총 엔티티 120EA (LINE: 30, POLYLINE: 25, TEXT: 18 ...)</div>
+            <div class="actions-row" style="margin:8px 0;">
+              <button class="btn">JSON 다운로드</button>
+              <button class="btn">CSV 다운로드</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>레이어명</th><th>색상</th></tr></thead>
+                <tbody><tr><td>AXIS</td><td>#00ff99</td></tr><tr><td>WALL</td><td>#cccccc</td></tr></tbody>
+              </table>
+            </div>
+            <div class="table-wrap" style="margin-top:8px;">
+              <table>
+                <thead><tr><th>블록명</th><th>개수</th></tr></thead>
+                <tbody><tr><td>TITLE_BLOCK</td><td>4</td></tr></tbody>
+              </table>
+            </div>
+            <div class="table-wrap" style="margin-top:8px;">
+              <table>
+                <thead><tr><th>ID</th><th>TYPE</th><th>LAYER</th><th>TEXT</th><th>Coordinates</th></tr></thead>
+                <tbody><tr><td>1</td><td>LINE</td><td>AXIS</td><td>-</td><td>[0,0],[10,0]</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="accordion">
+          <div class="acc-header" data-acc="ai">AI 분석 내용</div>
+          <div class="acc-body" id="acc-ai">
+            <div class="muted">세부 설정에 따라 도출된 분석 리포트가 여기에 표시됩니다.</div>
+            <div class="actions-row" style="margin:8px 0;">
+              <button class="btn">JSON 다운로드</button>
+              <button class="btn">CSV 다운로드</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>항목</th><th>값</th></tr></thead>
+                <tbody><tr><td>도곽 블록</td><td>${$("blockTitle").value || "미지정"}</td></tr></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       `;
+      document.querySelectorAll(".acc-header").forEach((h) => {
+        h.onclick = () => {
+          const body = $("acc-" + h.dataset.acc);
+          body.classList.toggle("open");
+        };
+      });
     }
 
-    // 초기 로드
-    fetchProjects();
+    setTab("home");
+    updateUserUI();
   </script>
 </body>
 </html>
