@@ -6,25 +6,25 @@
   <title>LAIKA</title>
   <style>
     :root {
-      --bg: #0c1018;
-      --surface: #0f1724;
-      --surface-2: #111b2c;
-      --border: #1f2c3e;
-      --accent: #6df3c3;
-      --accent-2: #61a8ff;
-      --text: #e6edf7;
-      --muted: #9fb3ce;
-      --error: #ff6b6b;
-      --success: #6df3c3;
+      --bg: #f6f8fb;
+      --surface: #ffffff;
+      --surface-2: #f1f4fb;
+      --border: #dfe6f3;
+      --accent: #2f8efb;
+      --accent-2: #4ad1c6;
+      --text: #1f2d3d;
+      --muted: #6b7a90;
+      --error: #e15c5c;
+      --success: #2dbe8c;
       --warn: #f2c84b;
-      --shadow: 0 20px 60px rgba(0,0,0,0.35);
+      --shadow: 0 12px 30px rgba(17, 38, 88, 0.12);
       --radius: 14px;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: "Pretendard", "Noto Sans KR", "Segoe UI", sans-serif;
-      background: radial-gradient(120% 120% at 20% 0%, rgba(97,168,255,0.08), transparent 40%), radial-gradient(120% 120% at 80% 20%, rgba(109,243,195,0.08), transparent 45%), #060910;
+      background: radial-gradient(140% 120% at 10% 0%, rgba(79,143,255,0.10), transparent 35%), radial-gradient(120% 140% at 90% 10%, rgba(74,209,198,0.12), transparent 45%), var(--bg);
       color: var(--text);
       min-height: 100vh;
       padding: 0 20px 48px;
@@ -35,7 +35,7 @@
       top: 0;
       z-index: 20;
       backdrop-filter: blur(12px);
-      background: rgba(6, 9, 16, 0.9);
+      background: rgba(255, 255, 255, 0.9);
       border-bottom: 1px solid var(--border);
     }
     .nav {
@@ -62,10 +62,10 @@
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
       display: grid;
       place-items: center;
-      color: #0a0f17;
+      color: #ffffff;
       font-weight: 900;
       font-size: 16px;
-      box-shadow: 0 10px 30px rgba(109,243,195,0.25);
+      box-shadow: 0 10px 30px rgba(79,143,255,0.25);
     }
     .tabs {
       display: flex;
@@ -78,16 +78,16 @@
       padding: 10px 18px;
       border-radius: 999px;
       border: 1px solid var(--border);
-      background: rgba(17, 27, 44, 0.7);
+      background: #f7faff;
       color: var(--muted);
       cursor: pointer;
       transition: all 0.2s ease;
       font-weight: 600;
     }
     .tab.active {
-      color: #0a0f17;
+      color: #fff;
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      box-shadow: 0 10px 25px rgba(109,243,195,0.25);
+      box-shadow: 0 10px 25px rgba(79,143,255,0.25);
       border-color: transparent;
     }
     .nav-actions {
@@ -99,7 +99,7 @@
     .badge {
       padding: 6px 10px;
       border-radius: 10px;
-      background: rgba(97,168,255,0.12);
+      background: #eef4ff;
       border: 1px solid var(--border);
       font-size: 12px;
       color: var(--text);
@@ -119,9 +119,9 @@
     }
     .btn.primary {
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      color: #0a0f17;
+      color: #fff;
       border: none;
-      box-shadow: 0 14px 40px rgba(97,168,255,0.25);
+      box-shadow: 0 12px 30px rgba(79,143,255,0.25);
     }
     .btn.ghost { background: transparent; }
     .btn:disabled {
@@ -142,8 +142,10 @@
       padding: 22px 28px;
       box-shadow: none;
       text-align: center;
+      background: transparent;
+      border: none;
     }
-    .hero h1 { margin: 0 0 10px; font-size: 26px; }
+    .hero h1 { margin: 0 0 10px; font-size: 26px; color: #0f1e33; }
     .hero p { margin: 4px 0 14px; color: var(--muted); }
     .pill {
       display: inline-flex;
@@ -192,7 +194,7 @@
       border-radius: 14px;
       padding: 26px;
       text-align: center;
-      background: rgba(17,27,44,0.5);
+      background: #f9fbff;
       transition: all 0.2s ease;
       cursor: pointer;
     }
@@ -205,8 +207,8 @@
     }
     .dropzone.dragover {
       border-color: var(--accent);
-      background: rgba(109,243,195,0.08);
-      box-shadow: 0 10px 30px rgba(109,243,195,0.15);
+      background: #e9f1ff;
+      box-shadow: 0 10px 30px rgba(79,143,255,0.18);
     }
     .file-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
     .file-row {
@@ -268,6 +270,7 @@
       color: var(--muted);
       cursor: pointer;
       transition: all 0.2s ease;
+      background: #f9fbff;
     }
     .add-card:hover {
       border-color: var(--accent);
