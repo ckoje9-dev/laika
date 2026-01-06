@@ -645,8 +645,7 @@
               <div class="row-select compact"><label>축선</label><div class="smart-select compact-select" id="struct-axis-layer" data-select-type="layer"></div></div>
               <div class="row-select compact"><label>콘크리트 기둥</label><div class="smart-select compact-select" id="struct-ccol-layer" data-select-type="layer"></div></div>
               <div class="row-select compact"><label>철골 기둥</label><div class="smart-select compact-select" id="struct-scol-layer" data-select-type="layer"></div></div>
-              <div class="row-select compact"><label>콘크리트 벽체</label><div class="smart-select compact-select" id="struct-cwall-layer" data-select-type="layer"></div></div>
-              <div class="row-select compact"><label>슬라브</label><div class="smart-select compact-select" id="struct-slab-layer" data-select-type="layer"></div></div>
+              <div class="row-select compact"><label>콘크리트 벽체/슬라브</label><div class="smart-select compact-select" id="struct-cwall-layer" data-select-type="layer"></div></div>
             </div>
             <div class="config-card">
               <h4>비구조 요소</h4>
@@ -1074,7 +1073,6 @@
               if (mode === "analyze") {
                 await loadParsed(file).catch(() => {});
                 $("detailSection").style.display = "grid";
-                $("resultSection").style.display = "grid";
               }
               return resolve(true);
             }
@@ -1136,7 +1134,6 @@
         "struct-ccol-layer": { type: "layer", keys: ["COL"] },
         "struct-scol-layer": { type: "layer", keys: ["STL"] },
         "struct-cwall-layer": { type: "layer", keys: ["CON"] },
-        "struct-slab-layer": { type: "layer", keys: ["CON"] },
         "non-wall-layer": { type: "layer", keys: ["WAL"] },
         "non-door-layer": { type: "layer", keys: ["DOOR"] },
         "non-window-layer": { type: "layer", keys: ["WIN"] },
@@ -1391,9 +1388,17 @@
         }
       };
       $("btnParse").onclick = startParse;
-      $("btnAnalyze").onclick = () => {
+      $("btnAnalyze").onclick = async () => {
         if (!state.loggedIn) return alert("로그인 후 이용 가능합니다.");
         if (state.analyzeFiles.length === 0) return alert("분석할 DXF 파일을 먼저 업로드하세요.");
+        const doneFiles = state.analyzeFiles.filter((f) => f.status === "done");
+        if (doneFiles.length === 0) return alert("파싱 완료된 DXF가 없습니다. 먼저 파싱을 완료하세요.");
+        if (!state.selectedResult || !doneFiles.includes(state.selectedResult)) {
+          state.selectedResult = doneFiles[0];
+        }
+        if (state.selectedResult && !state.selectedResult.parsedData) {
+          await loadParsed(state.selectedResult);
+        }
         $("resultSection").style.display = "grid";
         updateResultList(true);
         renderResultView();
