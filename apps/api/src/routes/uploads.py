@@ -130,7 +130,7 @@ async def init_upload(payload: UploadInitRequest, session: AsyncSession = Depend
     # 변환 잡 enqueue (동기 루틴이므로 실패해도 요청 자체는 201 반환)
     enqueued = False
     try:
-        enqueue("apps.worker.src.jobs.dwg_to_dxf.run", str(storage_path), str(file_row.id))
+        enqueue("apps.worker.src.pipelines.convert.dwg_to_dxf.run", str(storage_path), str(file_row.id))
         enqueued = True
     except Exception as e:
         # 큐 장애는 로깅만 하고 반환
@@ -307,7 +307,7 @@ async def enqueue_parse(file_id: str, session: AsyncSession = Depends(get_sessio
         enqueued = False
         message: str | None = None
         try:
-            enqueue("apps.worker.src.jobs.convert_and_parse.run", file_id=file_id)
+            enqueue("apps.worker.src.pipelines.convert.convert_and_parse.run", file_id=file_id)
             enqueued = True
             message = "DWG 변환 후 파싱을 위한 파이프라인을 실행했습니다."
         except Exception as e:  # pragma: no cover - 큐 설정 오류 시 로그를 남기고 반환
@@ -324,7 +324,7 @@ async def enqueue_parse(file_id: str, session: AsyncSession = Depends(get_sessio
     enqueued = False
     message: str | None = None
     try:
-        enqueue("apps.worker.src.jobs.dxf_parse.run", file_id=file_id)
+        enqueue("apps.worker.src.pipelines.parse.dxf_parse.run", file_id=file_id)
         enqueued = True
     except Exception as e:  # pragma: no cover - 큐 설정 오류 시 로그를 남기고 반환
         import logging
@@ -346,7 +346,7 @@ async def enqueue_convert(file_id: str, session: AsyncSession = Depends(get_sess
     enqueued = False
     message: str | None = None
     try:
-        enqueue("apps.worker.src.jobs.dwg_to_dxf.run", file_row.path_original, file_id)
+        enqueue("apps.worker.src.pipelines.convert.dwg_to_dxf.run", file_row.path_original, file_id)
         enqueued = True
     except Exception as e:  # pragma: no cover
         import logging

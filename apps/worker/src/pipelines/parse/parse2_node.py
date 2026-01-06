@@ -1,4 +1,4 @@
-"""DXF 파싱 및 메타/엔티티 적재 잡."""
+"""DXF 2차 파싱: ezdxf 기반 세부 파싱 및 DB 적재."""
 from __future__ import annotations
 
 import json
@@ -10,7 +10,7 @@ from typing import Any, Iterable, Optional
 
 try:
     import ezdxf  # type: ignore
-except ImportError:  # pragma: no cover - 라이브러리 미설치 시 런타임에 확인
+except ImportError:  # pragma: no cover
     ezdxf = None
 
 from geoalchemy2 import WKTElement
@@ -118,278 +118,89 @@ def _entity_area(entity) -> float | None:
         if dtype == "HATCH":
             return float(entity.get_area())
         if dtype in ("LWPOLYLINE", "POLYLINE"):
-            pts = [(p[0], p[1]) for p in entity.get_points("xy")]
-            if entity.closed or (pts and pts[0] != pts[-1]):
-                return _poly_area(pts)
+            pts = list(entity.get_points("xy"))
+            if not pts:
+                return None
+            return _poly_area([(float(x), float(y)) for x, y in pts])
         if dtype == "CIRCLE":
             r = getattr(entity.dxf, "radius", None)
-            if r is not None:
-                return float(3.141592653589793 * r * r)
+            return float(3.141592653589793 * r * r) if r is not None else None
+        if dtype == "ELLIPSE":
+            major = getattr(entity.dxf, "major_axis", None)
+            ratio = getattr(entity.dxf, "ratio", None)
+            if major is not None and ratio is not None:
+                import math
+
+                return float(math.pi * (major.magnitude / 2.0) * (major.magnitude / 2.0) * ratio)
     except Exception:
         return None
     return None
 
 
-def _entity_common_props(entity) -> dict[str, Any]:
-    return {
-        "color_index": getattr(entity.dxf, "color", None),
-        "true_color": getattr(entity.dxf, "true_color", None),
-        "linetype": getattr(entity.dxf, "linetype", None),
-        "lineweight": getattr(entity.dxf, "lineweight", None),
-    }
-
-
-def _entity_properties(entity) -> dict[str, Any]:
-    dtype = entity.dxftype()
-    props: dict[str, Any] = _entity_common_props(entity)
-
-    if dtype == "LINE":
-        props.update(
-            {
-                "start": list(entity.dxf.start) if hasattr(entity.dxf, "start") else None,
-                "end": list(entity.dxf.end) if hasattr(entity.dxf, "end") else None,
-            }
-        )
-    elif dtype in ("LWPOLYLINE", "POLYLINE"):
-        pts = [list(p) for p in entity.get_points("xy")]
-        props.update(
-            {
-                "vertices": pts,
-                "is_closed": bool(getattr(entity, "closed", False)),
-                "width": getattr(entity.dxf, "const_width", None),
-            }
-        )
-    elif dtype == "CIRCLE":
-        props.update(
-            {
-                "center": list(getattr(entity.dxf, "center", []) or []),
-                "radius": getattr(entity.dxf, "radius", None),
-                "diameter": getattr(entity.dxf, "radius", None) and getattr(entity.dxf, "radius") * 2,
-            }
-        )
-    elif dtype == "ARC":
-        props.update(
-            {
-                "center": list(getattr(entity.dxf, "center", []) or []),
-                "radius": getattr(entity.dxf, "radius", None),
-                "start_angle": getattr(entity.dxf, "start_angle", None),
-                "end_angle": getattr(entity.dxf, "end_angle", None),
-            }
-        )
-    elif dtype == "ELLIPSE":
-        props.update(
-            {
-                "center": list(getattr(entity.dxf, "center", []) or []),
-                "major_axis": list(getattr(entity.dxf, "major_axis", []) or []),
-                "ratio": getattr(entity.dxf, "ratio", None),
-                "start_param": getattr(entity.dxf, "start_param", None),
-                "end_param": getattr(entity.dxf, "end_param", None),
-            }
-        )
-    elif dtype == "HATCH":
-        props.update(
-            {
-                "pattern": getattr(entity.dxf, "pattern_name", None),
-                "scale": getattr(entity.dxf, "pattern_scale", None),
-                "rotation": getattr(entity.dxf, "pattern_angle", None),
-                "paths": [path.type for path in getattr(entity, "paths", [])],
-            }
-        )
-    elif dtype == "TEXT":
-        props.update(
-            {
-                "text": entity.plain_text() if hasattr(entity, "plain_text") else getattr(entity.dxf, "text", None),
-                "insert": getattr(entity.dxf, "insert", None) and list(entity.dxf.insert),
-                "rotation": getattr(entity.dxf, "rotation", None),
-                "alignment": getattr(entity.dxf, "halign", None),
-                "height": getattr(entity.dxf, "height", None),
-                "style": getattr(entity.dxf, "style", None),
-            }
-        )
-    elif dtype == "MTEXT":
-        props.update(
-            {
-                "text": getattr(entity.dxf, "text", None),
-                "insert": getattr(entity.dxf, "insert", None) and list(entity.dxf.insert),
-                "rotation": getattr(entity.dxf, "rotation", None),
-                "width": getattr(entity.dxf, "width", None),
-                "line_spacing": getattr(entity.dxf, "line_spacing_factor", None),
-                "style": getattr(entity.dxf, "style", None),
-            }
-        )
-    elif dtype == "DIMENSION":
-        props.update(
-            {
-                "dimension_type": getattr(entity.dxf, "dimtype", None),
-                "measurement": getattr(entity, "measurement", None),
-                "defpoint": getattr(entity.dxf, "defpoint", None) and list(entity.dxf.defpoint),
-                "text_midpoint": getattr(entity.dxf, "text_midpoint", None) and list(entity.dxf.text_midpoint),
-                "block": getattr(entity.dxf, "block", None),
-            }
-        )
-    elif dtype == "INSERT":
-        attrs = []
-        for attr in getattr(entity, "attribs", []):
-            attrs.append(
-                {
-                    "tag": getattr(attr.dxf, "tag", None),
-                    "value": getattr(attr.dxf, "text", None),
-                    "position": getattr(attr.dxf, "insert", None) and list(attr.dxf.insert),
-                    "invisible": getattr(attr.dxf, "invisible", None),
-                }
-            )
-        props.update(
-            {
-                "name": getattr(entity.dxf, "name", None),
-                "insert": getattr(entity.dxf, "insert", None) and list(entity.dxf.insert),
-                "scale": getattr(entity.dxf, "scale", None) and list(entity.dxf.scale),
-                "rotation": getattr(entity.dxf, "rotation", None),
-                "attributes": attrs,
-            }
-        )
-    elif dtype == "BLOCK":
-        props.update(
-            {
-                "name": getattr(entity.dxf, "name", None),
-                "base_point": getattr(entity.dxf, "base_point", None) and list(entity.dxf.base_point),
-            }
-        )
-    return props
-
-
-def _json_safe(value: Any) -> Any:
-    """Vec3 등 직렬화 불가 객체를 리스트/문자열로 정규화."""
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return value
-    if isinstance(value, (list, tuple, set)):
-        return [_json_safe(v) for v in value]
-    if isinstance(value, dict):
-        return {str(k): _json_safe(v) for k, v in value.items()}
-    if hasattr(value, "x") and hasattr(value, "y"):
-        coords = [float(getattr(value, "x", 0.0)), float(getattr(value, "y", 0.0))]
-        if hasattr(value, "z"):
-            coords.append(float(getattr(value, "z", 0.0)))
-        return coords
-    return str(value)
-
-
 def _entity_counts(doc) -> dict[str, int]:
-    msp = doc.modelspace()
-    entity_types = [
-        "LINE",
-        "LWPOLYLINE",
-        "POLYLINE",
-        "CIRCLE",
-        "ARC",
-        "ELLIPSE",
-        "TEXT",
-        "MTEXT",
-        "HATCH",
-        "DIMENSION",
-        "INSERT",
-        "BLOCK",
-    ]
-    counts = {etype: len(msp.query(etype)) for etype in entity_types}
+    counts: dict[str, int] = defaultdict(int)
+    for entity in doc.modelspace():
+        counts[entity.dxftype()] += 1
     counts["layers"] = len(doc.layers)
     return counts
 
 
-def _write_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as fp:
-        for rec in records:
-            fp.write(json.dumps(_json_safe(rec), ensure_ascii=False))
-            fp.write("\n")
-
-
 def _json_safe(value: Any) -> Any:
-    """ezdxf Vec3 등 JSON 직렬화 불가 객체를 안전하게 변환."""
-    if value is None or isinstance(value, (str, int, float, bool)):
+    try:
+        json.dumps(value)
         return value
-    if isinstance(value, (list, tuple, set)):
-        return [_json_safe(v) for v in value]
-    if isinstance(value, dict):
-        return {str(k): _json_safe(v) for k, v in value.items()}
-    if hasattr(value, "x") and hasattr(value, "y"):
-        coords = [float(getattr(value, "x", 0.0)), float(getattr(value, "y", 0.0))]
-        if hasattr(value, "z"):
-            coords.append(float(getattr(value, "z", 0.0)))
-        return coords
-    return str(value)
+    except TypeError:
+        return str(value)
 
 
 def _collect_document_metadata(doc) -> dict[str, Any]:
+    insunits = doc.header.get("$INSUNITS", None)
     return {
         "section": "document",
-        "dxf_version": doc.dxfversion,
-        "insunits_label": INSUNITS_MAP.get(int(doc.header.get("$INSUNITS")))
-        if doc.header.get("$INSUNITS") is not None
-        else None,
+        "filename": getattr(doc, "filename", None),
+        "version": doc.dxfversion if hasattr(doc, "dxfversion") else None,
+        "insunits": INSUNITS_MAP.get(insunits, insunits),
+        "comment": getattr(doc, "comment", None),
     }
 
 
 def _collect_header_metadata(doc) -> dict[str, Any]:
-    header = doc.header
-    insunits_raw = header.get("$INSUNITS")
-    return {
-        "section": "header",
-        "values": {
-            "$INSUNITS": insunits_raw,
-            "insunits_label": INSUNITS_MAP.get(int(insunits_raw)) if insunits_raw is not None else None,
-            "$EXTMIN": header.get("$EXTMIN"),
-            "$EXTMAX": header.get("$EXTMAX"),
-            "$LIMMIN": header.get("$LIMMIN"),
-            "$LIMMAX": header.get("$LIMMAX"),
-            "$ANGBASE": header.get("$ANGBASE"),
-            "$ANGDIR": header.get("$ANGDIR"),
-        },
-    }
+    header = {}
+    for key, value in doc.header.items():
+        if key.startswith("$"):
+            header[key[1:]] = value
+    return {"section": "header", "header": header}
 
 
 def _collect_table_layers(doc) -> list[dict[str, Any]]:
     layers = []
     for layer in doc.layers:
-        plottable = getattr(layer, "is_plottable", None)
-        if callable(plottable):
-            try:
-                plottable = plottable()
-            except Exception:
-                plottable = None
-        elif plottable is None:
-            plottable = getattr(getattr(layer, "dxf", None), "plot", None)
         layers.append(
             {
                 "name": layer.dxf.name,
-                "color_index": layer.dxf.color,
-                "true_color": getattr(layer.dxf, "true_color", None),
+                "color": layer.color,
                 "linetype": layer.dxf.linetype,
-                "is_on": not bool(layer.is_off()),
-                "is_locked": bool(getattr(layer, "is_locked", False)),
-                "is_plottable": bool(plottable) if plottable is not None else None,
+                "lineweight": layer.dxf.get("lineweight"),
+                "plot": layer.dxf.get("plot"),
+                "frozen": layer.is_frozen,
+                "locked": layer.is_locked,
             }
         )
     return layers
 
 
 def _collect_table_linetypes(doc) -> list[dict[str, Any]]:
-    ltypes = []
-    for lt in doc.linetypes:
-        pattern = None
-        try:
-            pattern = list(lt.pattern_tags())
-        except Exception:
-            try:
-                pattern = list(lt.pattern)
-            except Exception:
-                pattern = None
-        ltypes.append(
+    lts = []
+    for ltype in doc.linetypes:
+        lts.append(
             {
-                "name": lt.dxf.name,
-                "length": getattr(lt.dxf, "length", None),
-                "pattern": pattern,
+                "name": ltype.dxf.name,
+                "description": ltype.dxf.description,
+                "pattern_length": getattr(ltype.dxf, "pattern_length", None),
+                "pattern": getattr(ltype.dxf, "pattern", None),
             }
         )
-    return ltypes
+    return lts
 
 
 def _collect_table_text_styles(doc) -> list[dict[str, Any]]:
@@ -398,10 +209,9 @@ def _collect_table_text_styles(doc) -> list[dict[str, Any]]:
         styles.append(
             {
                 "name": style.dxf.name,
-                "font": getattr(style.dxf, "font", None) or getattr(style.dxf, "filename", None),
-                "height": getattr(style.dxf, "height", None),
-                "width_factor": getattr(style.dxf, "width", None),
-                "oblique": getattr(style.dxf, "oblique", None),
+                "font": style.dxf.get("font"),
+                "width_factor": style.dxf.get("width_factor"),
+                "oblique": style.dxf.get("oblique"),
             }
         )
     return styles
@@ -414,6 +224,7 @@ def _collect_table_dim_styles(doc) -> list[dict[str, Any]]:
             {
                 "name": dim.dxf.name,
                 "arrow_size": dim.dxf.get("dimasz"),
+                "extension": dim.dxf.get("dimexe"),
                 "text_height": dim.dxf.get("dimtxt"),
                 "unit_format": dim.dxf.get("dimlunit"),
                 "tolerance": dim.dxf.get("dimtol"),
@@ -489,17 +300,29 @@ def _collect_layouts_metadata(doc) -> dict[str, Any]:
     return {"section": "layouts", "layouts": layouts}
 
 
+def _write_jsonl(path: Path, records: Iterable[Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as fp:
+        for rec in records:
+            fp.write(json.dumps(rec, ensure_ascii=False))
+            fp.write("\n")
+
+
 def _default_jsonl_path(src: Path) -> Path:
     return STORAGE_DERIVED_PATH / f"{src.stem}_meta.jsonl"
 
 
 async def run(file_id: Optional[str] = None, src: Optional[Path] = None, jsonl_path: Optional[Path] = None) -> None:
-    """DXF 파일을 파싱해 1~3번 메타데이터는 JSONL, 4~5번 엔티티는 DB에 적재."""
+    """DXF 파일을 파싱해 메타데이터를 JSONL로, 엔티티는 DB에 적재한다."""
     _ensure_ezdxf()
     STORAGE_DERIVED_PATH.mkdir(parents=True, exist_ok=True)
 
+    if isinstance(src, str):
+        src = Path(src)
+    if isinstance(jsonl_path, str):
+        jsonl_path = Path(jsonl_path)
+
     if src is None:
-        # file_id가 주어지면 DB에 기록된 path_dxf를 사용해 정확한 파일을 파싱
         if file_id:
             async with SessionLocal() as session:
                 file_row = await session.get(models.File, file_id)
@@ -517,12 +340,11 @@ async def run(file_id: Optional[str] = None, src: Optional[Path] = None, jsonl_p
                 return
             src = candidates[0]
 
-    logger.info("DXF 파싱 시작: %s", src)
+    logger.info("DXF 2차 파싱 시작: %s", src)
     doc = ezdxf.readfile(src)
     counts = _entity_counts(doc)
     logger.info("DXF 카운트: %s", counts)
 
-    # 1~3 + 5 메타데이터 JSONL 기록
     metadata_records = [
         _collect_document_metadata(doc),
         _collect_header_metadata(doc),
@@ -577,7 +399,6 @@ async def run(file_id: Optional[str] = None, src: Optional[Path] = None, jsonl_p
 
     async with SessionLocal() as session:
         try:
-            # 기존 파싱 결과는 제거하고 다시 적재
             await session.execute(text("delete from dxf_entities_raw where file_id = :file_id"), {"file_id": file_id})
             session.add_all(entities)
             await session.execute(
@@ -609,8 +430,45 @@ async def run(file_id: Optional[str] = None, src: Optional[Path] = None, jsonl_p
                 },
             )
             await session.commit()
-            logger.info("DXF 파싱 완료 및 DB 저장: %s (entities=%s)", file_id, len(entities))
+            logger.info("DXF 2차 파싱 완료 및 DB 저장: %s (entities=%s)", file_id, len(entities))
         except SQLAlchemyError as e:
             await session.rollback()
             logger.exception("DB 저장 중 오류: %s", e)
             raise
+
+
+def _entity_properties(entity) -> dict[str, Any]:
+    dtype = entity.dxftype()
+    props: dict[str, Any] = {
+        "color": getattr(entity.dxf, "color", None),
+        "linetype": getattr(entity.dxf, "linetype", None),
+        "lineweight": getattr(entity.dxf, "lineweight", None),
+        "thickness": getattr(entity.dxf, "thickness", None),
+    }
+
+    if dtype in ("LINE", "POLYLINE", "LWPOLYLINE"):
+        props["points"] = [list(pt) for pt in getattr(entity, "points", lambda: [])()] if hasattr(entity, "points") else list(entity.get_points("xy"))
+    if dtype == "CIRCLE":
+        props["center"] = list(getattr(entity.dxf, "center", ()))
+        props["radius"] = getattr(entity.dxf, "radius", None)
+    if dtype == "ARC":
+        props["center"] = list(getattr(entity.dxf, "center", ()))
+        props["radius"] = getattr(entity.dxf, "radius", None)
+        props["start_angle"] = getattr(entity.dxf, "start_angle", None)
+        props["end_angle"] = getattr(entity.dxf, "end_angle", None)
+    if dtype in ("TEXT", "MTEXT"):
+        props["text"] = getattr(entity.dxf, "text", None)
+        props["height"] = getattr(entity.dxf, "height", None) or getattr(entity.dxf, "char_height", None)
+        props["style"] = getattr(entity.dxf, "style", None)
+    if dtype == "DIMENSION":
+        props["block"] = getattr(entity.dxf, "block", None)
+        props["definition_point"] = list(getattr(entity.dxf, "definition_point", ()))
+    if dtype == "INSERT":
+        props["name"] = getattr(entity.dxf, "name", None)
+        props["insert"] = list(getattr(entity.dxf, "insert", ()))
+        props["rotation"] = getattr(entity.dxf, "rotation", None)
+        props["xscale"] = getattr(entity.dxf, "xscale", None)
+        props["yscale"] = getattr(entity.dxf, "yscale", None)
+        props["zscale"] = getattr(entity.dxf, "zscale", None)
+
+    return {k: v for k, v in props.items() if v not in (None, [], {})}

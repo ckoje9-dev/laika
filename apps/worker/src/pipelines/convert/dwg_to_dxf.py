@@ -1,4 +1,4 @@
-"""DWG 업로드 감지 후 ODA 변환 실행 잡."""
+"""DWG 업로드 감지 후 ODA 변환 실행 파이프라인."""
 import asyncio
 import logging
 import os
@@ -23,10 +23,10 @@ STORAGE_DERIVED_PATH = Path(os.getenv("STORAGE_DERIVED_PATH", "storage/derived")
 
 
 async def convert_dwg_to_dxf(src: Path, dest_dir: Path) -> Path:
+    """ODAFileConverter(또는 docker 모드)로 DWG를 DXF로 변환한다."""
     dest_dir.mkdir(parents=True, exist_ok=True)
     output_path = dest_dir / f"{src.stem}.dxf"
 
-    # 컨테이너 실행 경로 대비를 위해 절대 경로 확보
     src_abs = src.resolve()
     dest_abs = dest_dir.resolve()
     input_dir = src_abs.parent  # ODAFileConverter는 디렉터리 단위로 변환
@@ -35,7 +35,6 @@ async def convert_dwg_to_dxf(src: Path, dest_dir: Path) -> Path:
         if not shutil.which("docker"):
             raise RuntimeError("docker CLI가 없습니다. worker 컨테이너에 docker-cli를 설치하고 /var/run/docker.sock을 마운트하세요.")
 
-        # 볼륨 이름을 바로 마운트 (compose: storage_data)
         container_root = Path(ODA_CONTAINER_WORKDIR)
         try:
             src_rel = src_abs.relative_to(container_root)
@@ -53,23 +52,22 @@ async def convert_dwg_to_dxf(src: Path, dest_dir: Path) -> Path:
             "-w",
             str(container_root),
             ODA_DOCKER_IMAGE,
-            # ODAFileConverter는 디렉터리 기준 변환, src 파일이 속한 폴더 전체를 입력으로 전달
             str(container_root / input_dir_rel),
             str(container_root / dest_rel),
-            "ACAD2018",  # 출력 DWG/DXF 버전
-            "DXF",       # 출력 포맷
-            "1",         # 재귀 처리 (1=켜기)
-            "1",         # 로그 레벨 (1=기본)
+            "ACAD2018",
+            "DXF",
+            "1",
+            "1",
         ]
     else:
         cmd = [
             str(ODA_CONVERTER_PATH),
             str(src_abs),
             str(dest_abs),
-            "ACAD2018",  # 출력 DWG/DXF 버전
-            "DXF",       # 출력 포맷
-            "1",         # 재귀 처리 (1=켜기)
-            "1",         # 로그 레벨 (1=기본)
+            "ACAD2018",
+            "DXF",
+            "1",
+            "1",
         ]
 
     logger.info("ODA 변환 실행: cmd=%s", " ".join(str(c) for c in cmd))
@@ -109,7 +107,6 @@ async def run(src: Optional[Path] = None, file_id: Optional[str] = None) -> Opti
     STORAGE_DERIVED_PATH.mkdir(parents=True, exist_ok=True)
 
     if src is None:
-        # 데모용: 원본 폴더에서 가장 최근 DWG 하나를 선택
         candidates = sorted(STORAGE_ORIGINAL_PATH.glob("*.dwg"), key=lambda p: p.stat().st_mtime, reverse=True)
         if not candidates:
             logger.info("변환할 DWG가 없습니다 (원본 경로: %s)", STORAGE_ORIGINAL_PATH)
@@ -118,7 +115,6 @@ async def run(src: Optional[Path] = None, file_id: Optional[str] = None) -> Opti
 
     dest_path = STORAGE_DERIVED_PATH / f"{src.stem}.dxf"
 
-    # pending 로그 기록
     if file_id:
         async with SessionLocal() as session:
             await session.execute(
@@ -152,7 +148,6 @@ async def run(src: Optional[Path] = None, file_id: Optional[str] = None) -> Opti
     if file_id:
         async with SessionLocal() as session:
             params = {"file_id": file_id, "path_dxf": str(dest_path)}
-            # psycopg3는 한 번의 prepared statement에 여러 SQL을 넣을 수 없어 나눠서 실행
             await session.execute(
                 text("update files set path_dxf = :path_dxf where id = :file_id"),
                 params,

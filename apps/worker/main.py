@@ -10,14 +10,9 @@ import logging
 import sys
 from argparse import ArgumentParser, Namespace
 
-from apps.worker.src.jobs import (
-    dwg_to_dxf,
-    dxf_parse,
-    dxf_parse2,
-    convert_and_parse,
-    semantic_build,
-    index_project,
-)
+from apps.worker.src.pipelines.convert import dwg_to_dxf, convert_and_parse
+from apps.worker.src.pipelines.parse import dxf_parse, dxf_parse2
+from apps.worker.src.pipelines import semantic_build, index_project
 from packages.queue import rq_client
 
 logging.basicConfig(

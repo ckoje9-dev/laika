@@ -1,4 +1,4 @@
-"""DWG -> DXF 변환 후 바로 1차 파싱까지 수행하는 파이프라인 잡."""
+"""DWG -> DXF 변환 후 1차/2차 파싱까지 수행하는 파이프라인."""
 from __future__ import annotations
 
 import logging
@@ -9,7 +9,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from packages.db.src import models
 from packages.db.src.session import SessionLocal
-from . import dwg_to_dxf, dxf_parse
+from apps.worker.src.pipelines.convert import dwg_to_dxf
+from apps.worker.src.pipelines.parse import dxf_parse
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +39,9 @@ async def run(file_id: str) -> None:
         await dxf_parse.run(file_id=file_id)
     except Exception:
         logger.exception("convert_and_parse: 파싱 실패 file_id=%s", file_id)
-        # 실패 로그는 dxf_parse 내부에서 기록됨
         return
 
-    # 3) 성공 로그 추가(변환/파싱 성공 시점 기록)
+    # 3) 완료 로그
     async with SessionLocal() as session:
         try:
             await session.execute(
