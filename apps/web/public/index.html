@@ -6,7 +6,8 @@
   <title>LAIKA</title>
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/dxf-viewer@0.6.2/dist/dxf-viewer.min.js"></script>
+  <!-- 우선 로컬 vendor 경로에서 뷰어를 불러옵니다. (파일을 public/vendor/dxf-viewer.min.js 에 두세요) -->
+  <script src="/vendor/dxf-viewer.min.js"></script>
   <style>
     :root {
       --bg: #f6f8fb;
@@ -1360,10 +1361,10 @@
 
     async function loadViewerScript() {
       const urls = [
+        "/vendor/dxf-viewer.min.js",
+        "/vendor/dxf-viewer.js",
+        "https://cdn.jsdelivr.net/gh/gdsestimating/dxf-viewer@v0.6.2/dist/dxf-viewer.min.js",
         "https://cdn.jsdelivr.net/gh/gdsestimating/dxf-viewer@0.6.2/dist/dxf-viewer.min.js",
-        "https://cdn.jsdelivr.net/npm/dxf-viewer@0.6.2/dist/dxf-viewer.min.js",
-        "https://cdn.jsdelivr.net/npm/dxf-viewer/dist/dxf-viewer.min.js",
-        "https://unpkg.com/dxf-viewer@0.6.2/dist/dxf-viewer.min.js",
       ];
       for (const url of urls) {
         try {
