@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LAIKA</title>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dxf-viewer@0.6.2/dist/dxf-viewer.min.js"></script>
   <style>
     :root {
       --bg: #f6f8fb;
@@ -414,6 +417,13 @@
       overflow: auto;
       max-height: 260px;
     }
+    .preview-frame {
+      width: 100%;
+      height: 340px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #f7faff;
+    }
     .tag {
       display: inline-flex;
       align-items: center;
@@ -712,6 +722,8 @@
       layerOptions: [],
       blockOptions: [],
       templateFile: null,
+      viewerCtor: null,
+      viewerLoading: null,
     };
 
     const statusCopy = {
@@ -1256,7 +1268,10 @@
       view.innerHTML = `
         <div class="pill">AI 도면 분석 결과</div>
         <h3 style="margin:8px 0 6px;">파일: ${file.name} / 단위: ${data.unit || "mm"}</h3>
-        <div class="card" style="padding:12px; background: rgba(0,0,0,0.15); margin:8px 0;">도면 미리보기 영역 (SVG 뷰어 자리)</div>
+        <div class="card" style="padding:10px; background: transparent; margin:8px 0; border:1px solid var(--border);">
+          <div class="muted" style="margin-bottom:6px;">도면 미리보기</div>
+          <div id="dxfPreview" class="preview-frame" style="position:relative; overflow:hidden; background:#f7faff;"></div>
+        </div>
         <div class="accordion">
           <div class="acc-header" data-acc="basic">DXF 기본 파싱 내용</div>
           <div class="acc-body" id="acc-basic">
@@ -1331,6 +1346,103 @@
       });
       $("acc-basic")?.classList.add("open");
       $("acc-ai")?.classList.add("open");
+
+      renderDxfPreview(file);
+    }
+
+    function resolveViewerCtorFromGlobal() {
+      return (
+        (window.DxfViewer && (window.DxfViewer.Viewer || window.DxfViewer.default || window.DxfViewer)) ||
+        (window.DXFViewer && window.DXFViewer.Viewer) ||
+        window.Viewer
+      );
+    }
+
+    async function loadViewerScript() {
+      const urls = [
+        "https://cdn.jsdelivr.net/gh/gdsestimating/dxf-viewer@0.6.2/dist/dxf-viewer.min.js",
+        "https://cdn.jsdelivr.net/npm/dxf-viewer@0.6.2/dist/dxf-viewer.min.js",
+        "https://cdn.jsdelivr.net/npm/dxf-viewer/dist/dxf-viewer.min.js",
+        "https://unpkg.com/dxf-viewer@0.6.2/dist/dxf-viewer.min.js",
+      ];
+      for (const url of urls) {
+        try {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement("script");
+            s.src = url;
+            s.onload = resolve;
+            s.onerror = reject;
+            document.head.appendChild(s);
+          });
+          const ctor = resolveViewerCtorFromGlobal();
+          if (ctor) return ctor;
+        } catch (e) {
+          continue;
+        }
+      }
+      return null;
+    }
+
+    async function ensureViewerCtor() {
+      if (state.viewerCtor) return state.viewerCtor;
+      const globalCtor = resolveViewerCtorFromGlobal();
+      if (globalCtor) {
+        state.viewerCtor = globalCtor;
+        return state.viewerCtor;
+      }
+      if (!state.viewerLoading) state.viewerLoading = loadViewerScript();
+      const ctor = await state.viewerLoading;
+      if (ctor) state.viewerCtor = ctor;
+      return state.viewerCtor;
+    }
+
+    async function renderDxfPreview(file) {
+      const container = $("dxfPreview");
+      if (!container) return;
+      container.innerHTML = "";
+      if (!file.pathDxf) {
+        container.innerHTML = '<div class="muted" style="padding:12px;">DXF 파일이 준비되면 미리보기를 표시합니다.</div>';
+        return;
+      }
+      const url = `${API_BASE}/uploads/${file.fileId}/download?kind=dxf`;
+      const canvas = document.createElement("div");
+      canvas.style.width = "100%";
+      canvas.style.height = "100%";
+      container.appendChild(canvas);
+      const ctor = await ensureViewerCtor();
+      if (!ctor) {
+        container.innerHTML =
+          '<div class="muted" style="padding:12px;">뷰어 스크립트를 불러오지 못했습니다. <a href="' +
+          url +
+          '" target="_blank">파일을 다운로드</a> 후 확인하세요.</div>';
+        return;
+      }
+      let viewer;
+      try {
+        viewer = new ctor(canvas, { backgroundColor: [1, 1, 1] });
+      } catch (e) {
+        container.innerHTML =
+          '<div class="muted" style="padding:12px;">뷰어 초기화 실패: ' +
+          (e.message || e.toString()) +
+          '</div>';
+        return;
+      }
+      const load = viewer.loadURL || viewer.addModelFromURL || viewer.load;
+      if (!load) {
+        container.innerHTML = '<div class="muted" style="padding:12px;">뷰어 로드 메서드를 찾을 수 없습니다.</div>';
+        return;
+      }
+      load.call(viewer, url)
+        .then(() => {
+          if (viewer.resize) viewer.resize();
+        })
+        .catch((err) => {
+          container.innerHTML =
+            '<div class="muted" style="padding:12px;">DXF 로드 실패: ' +
+            (err?.message || err?.toString?.() || "알 수 없는 오류") +
+            '</div>';
+        });
+      window.addEventListener("resize", () => viewer.resize && viewer.resize());
     }
 
     function bindEvents() {
