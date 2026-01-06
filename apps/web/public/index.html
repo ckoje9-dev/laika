@@ -304,9 +304,26 @@
       margin-bottom: 12px;
     }
     .row-select label { color: var(--muted); }
+    .row-select.compact { grid-template-columns: 130px 1fr; margin-bottom: 8px; }
+    .config-columns {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .config-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      background: var(--surface-2);
+    }
+    .config-card h4 { margin: 0 0 8px; }
     .smart-select {
       position: relative;
     }
+    .compact-select .smart-display { padding: 8px; font-size: 13px; }
+    .compact-select .smart-dropdown { padding: 6px; }
+    .compact-select .smart-search { padding: 6px; }
     .smart-display {
       width: 100%;
       padding: 10px;
@@ -607,36 +624,36 @@
       <div id="detailSection" class="layout" style="margin-top:16px; display:none;">
         <div class="card" style="grid-column: span 2;">
           <h3>세부 설정</h3>
-          <div class="muted">요소에 해당하는 레이어 또는 블록을 지정하세요.</div>
-          <div class="tab-layout">
-            <div class="tab-rail">
-              <button class="btn ghost" data-detail-tab="basic">기본</button>
-              <button class="btn ghost" data-detail-tab="structure">구조 요소</button>
-              <button class="btn ghost" data-detail-tab="nonstruct">비구조 요소</button>
+          <div class="muted">템플릿 DXF를 선택하면 자동 지정 후 필요 시 세부 요소를 수정할 수 있습니다.</div>
+          <div class="row-select" style="grid-template-columns: 140px 1fr; margin-top:10px;">
+            <label>템플릿 DXF</label>
+            <div class="smart-select compact-select" id="template-file-select" data-select-type="template"></div>
+          </div>
+          <div class="config-columns">
+            <div class="config-card">
+              <h4>기본</h4>
+              <div class="row-select compact"><label>도곽</label><div class="smart-select compact-select" id="basic-border-block" data-select-type="block"></div></div>
+              <div class="row-select compact"><label>치수</label><div class="smart-select compact-select" id="basic-dim-layer" data-select-type="layer"></div></div>
+              <div class="row-select compact"><label>심볼</label><div class="smart-select compact-select" id="basic-symbol-layer" data-select-type="layer"></div></div>
+              <div class="row-select compact"><label>텍스트</label><div class="smart-select compact-select" id="basic-text-layer" data-select-type="layer"></div></div>
             </div>
-            <div>
-              <div id="panel-basic" class="tab-panel active">
-                <div class="row-select"><label>도곽</label><div class="smart-select" id="basic-border-layer" data-select-type="layer"></div><div class="smart-select" id="basic-border-block" data-select-type="block"></div></div>
-                <div class="row-select"><label>치수</label><div class="smart-select" id="basic-dim-layer" data-select-type="layer"></div><div class="smart-select" id="basic-dim-block" data-select-type="block"></div></div>
-                <div class="row-select"><label>심볼</label><div class="smart-select" id="basic-symbol-layer" data-select-type="layer"></div><div class="smart-select" id="basic-symbol-block" data-select-type="block"></div></div>
-                <div class="row-select"><label>텍스트</label><div class="smart-select" id="basic-text-layer" data-select-type="layer"></div><div class="smart-select" id="basic-text-block" data-select-type="block"></div></div>
-              </div>
-              <div id="panel-structure" class="tab-panel">
-                <div class="row-select"><label>축선</label><div class="smart-select" id="struct-axis-layer" data-select-type="layer"></div><div class="smart-select" id="struct-axis-block" data-select-type="block"></div></div>
-                <div class="row-select"><label>콘크리트 기둥</label><div class="smart-select" id="struct-ccol-layer" data-select-type="layer"></div><div class="smart-select" id="struct-ccol-block" data-select-type="block"></div></div>
-                <div class="row-select"><label>철골 기둥</label><div class="smart-select" id="struct-scol-layer" data-select-type="layer"></div><div class="smart-select" id="struct-scol-block" data-select-type="block"></div></div>
-                <div class="row-select"><label>콘크리트 벽체</label><div class="smart-select" id="struct-cwall-layer" data-select-type="layer"></div><div class="smart-select" id="struct-cwall-block" data-select-type="block"></div></div>
-                <div class="row-select"><label>슬라브</label><div class="smart-select" id="struct-slab-layer" data-select-type="layer"></div><div class="smart-select" id="struct-slab-block" data-select-type="block"></div></div>
-              </div>
-              <div id="panel-nonstruct" class="tab-panel">
-                <div class="row-select"><label>비내력 벽체</label><div class="smart-select" id="non-wall-layer" data-select-type="layer"></div><div class="smart-select" id="non-wall-block" data-select-type="block"></div></div>
-                <div class="row-select"><label>문</label><div class="smart-select" id="non-door-layer" data-select-type="layer"></div><div class="smart-select" id="non-door-block" data-select-type="block"></div></div>
-                <div class="row-select"><label>창호</label><div class="smart-select" id="non-window-layer" data-select-type="layer"></div><div class="smart-select" id="non-window-block" data-select-type="block"></div></div>
-                <div class="row-select"><label>계단/경사로</label><div class="smart-select" id="non-stair-layer" data-select-type="layer"></div><div class="smart-select" id="non-stair-block" data-select-type="block"></div></div>
-                <div class="row-select"><label>엘리베이터</label><div class="smart-select" id="non-elevator-layer" data-select-type="layer"></div><div class="smart-select" id="non-elevator-block" data-select-type="block"></div></div>
-                <div class="row-select"><label>가구</label><div class="smart-select" id="non-furniture-layer" data-select-type="layer"></div><div class="smart-select" id="non-furniture-block" data-select-type="block"></div></div>
-                <div class="row-select"><label>마감</label><div class="smart-select" id="non-finish-layer" data-select-type="layer"></div><div class="smart-select" id="non-finish-block" data-select-type="block"></div></div>
-              </div>
+            <div class="config-card">
+              <h4>구조 요소</h4>
+              <div class="row-select compact"><label>축선</label><div class="smart-select compact-select" id="struct-axis-layer" data-select-type="layer"></div></div>
+              <div class="row-select compact"><label>콘크리트 기둥</label><div class="smart-select compact-select" id="struct-ccol-layer" data-select-type="layer"></div></div>
+              <div class="row-select compact"><label>철골 기둥</label><div class="smart-select compact-select" id="struct-scol-layer" data-select-type="layer"></div></div>
+              <div class="row-select compact"><label>콘크리트 벽체</label><div class="smart-select compact-select" id="struct-cwall-layer" data-select-type="layer"></div></div>
+              <div class="row-select compact"><label>슬라브</label><div class="smart-select compact-select" id="struct-slab-layer" data-select-type="layer"></div></div>
+            </div>
+            <div class="config-card">
+              <h4>비구조 요소</h4>
+              <div class="row-select compact"><label>비내력 벽체</label><div class="smart-select compact-select" id="non-wall-layer" data-select-type="layer"></div></div>
+              <div class="row-select compact"><label>문</label><div class="smart-select compact-select" id="non-door-layer" data-select-type="layer"></div></div>
+              <div class="row-select compact"><label>창호</label><div class="smart-select compact-select" id="non-window-layer" data-select-type="layer"></div></div>
+              <div class="row-select compact"><label>계단/경사로</label><div class="smart-select compact-select" id="non-stair-layer" data-select-type="layer"></div></div>
+              <div class="row-select compact"><label>엘리베이터</label><div class="smart-select compact-select" id="non-elevator-layer" data-select-type="layer"></div></div>
+              <div class="row-select compact"><label>가구</label><div class="smart-select compact-select" id="non-furniture-layer" data-select-type="layer"></div></div>
+              <div class="row-select compact"><label>마감</label><div class="smart-select compact-select" id="non-finish-layer" data-select-type="layer"></div></div>
             </div>
           </div>
           <div class="actions-center">
@@ -692,6 +709,7 @@
       selectedOptions: {},
       layerOptions: [],
       blockOptions: [],
+      templateFile: null,
     };
 
     const statusCopy = {
@@ -927,10 +945,19 @@
       document.querySelectorAll(".smart-select").forEach((container) => {
         const type = container.dataset.selectType;
         const id = container.id;
-        const options = (type === "layer" ? state.layerOptions : state.blockOptions) || [];
+        let options = [];
+        if (type === "layer") options = state.layerOptions || [];
+        else if (type === "block") options = state.blockOptions || [];
+        else if (type === "template") options = (state.analyzeFiles || []).map((f) => f.name);
         const selected = new Set(state.selectedOptions[id] || []);
+        const placeholder =
+          type === "layer"
+            ? "레이어를 선택하세요."
+            : type === "block"
+            ? "블록을 선택하세요."
+            : "템플릿을 선택하세요.";
         container.innerHTML = `
-          <div class="smart-display"><span class="muted">${type === "layer" ? "레이어를 선택하세요." : "블록을 선택하세요."}</span></div>
+          <div class="smart-display"><span class="muted">${placeholder}</span></div>
           <div class="smart-dropdown">
             <input class="smart-search" placeholder="검색..." />
             <div class="smart-list"></div>
@@ -947,17 +974,28 @@
             .forEach((opt) => {
               const row = document.createElement("label");
               row.className = "smart-option";
-              const chk = document.createElement("input");
-              chk.type = "checkbox";
-              chk.value = opt;
-              chk.checked = selected.has(opt);
-              chk.onchange = () => {
-                if (chk.checked) selected.add(opt);
+              const input = document.createElement("input");
+              input.type = type === "template" ? "radio" : "checkbox";
+              input.name = type === "template" ? "template-select" : undefined;
+              input.value = opt;
+              input.checked = selected.has(opt);
+              input.onchange = () => {
+                if (type === "template") {
+                  selected.clear();
+                  if (input.checked) selected.add(opt);
+                  state.templateFile = (state.analyzeFiles || []).find((f) => f.name === opt) || state.templateFile;
+                  state.selectedOptions[id] = Array.from(selected);
+                  applyTemplateSelections();
+                  closeAll();
+                  updateDisplay();
+                  return;
+                }
+                if (input.checked) selected.add(opt);
                 else selected.delete(opt);
                 state.selectedOptions[id] = Array.from(selected);
                 updateDisplay();
               };
-              row.appendChild(chk);
+              row.appendChild(input);
               row.appendChild(document.createTextNode(opt));
               list.appendChild(row);
             });
@@ -970,7 +1008,9 @@
               ? arr.join(", ")
               : type === "layer"
               ? "레이어를 선택하세요."
-              : "블록을 선택하세요.";
+              : type === "block"
+              ? "블록을 선택하세요."
+              : "템플릿을 선택하세요.";
         };
 
         display.onclick = (e) => {
@@ -1078,15 +1118,58 @@
       if (btn) btn.disabled = false;
     }
 
+    function applyTemplateSelections() {
+      const layers = state.layerOptions || [];
+      const blocks = state.blockOptions || [];
+      const findMatches = (arr, keys) =>
+        arr.filter((name) => keys.some((k) => (name || "").toUpperCase().includes(k))).map((v) => v);
+
+      const presets = {
+        "basic-border-block": { type: "block", keys: ["FORM", "TITLE"] },
+        "basic-dim-layer": { type: "layer", keys: ["DIM"] },
+        "basic-symbol-layer": { type: "layer", keys: ["SYM"] },
+        "basic-text-layer": { type: "layer", keys: ["TXT", "TEXT"] },
+        "struct-axis-layer": { type: "layer", keys: ["AXIS", "GRID"] },
+        "struct-ccol-layer": { type: "layer", keys: ["COL"] },
+        "struct-scol-layer": { type: "layer", keys: ["STL"] },
+        "struct-cwall-layer": { type: "layer", keys: ["CON"] },
+        "struct-slab-layer": { type: "layer", keys: ["CON"] },
+        "non-wall-layer": { type: "layer", keys: ["WAL"] },
+        "non-door-layer": { type: "layer", keys: ["DOOR"] },
+        "non-window-layer": { type: "layer", keys: ["WIN"] },
+        "non-stair-layer": { type: "layer", keys: ["STR"] },
+        "non-elevator-layer": { type: "layer", keys: ["ELV"] },
+        "non-furniture-layer": { type: "layer", keys: ["FURN"] },
+        "non-finish-layer": { type: "layer", keys: ["FIN"] },
+      };
+
+      Object.entries(presets).forEach(([id, cfg]) => {
+        const pool = cfg.type === "layer" ? layers : blocks;
+        state.selectedOptions[id] = findMatches(pool, cfg.keys);
+      });
+      initSmartSelects();
+    }
+
     async function loadParsed(file) {
       if (!file?.fileId) return;
       const data = await api(`/uploads/${file.fileId}/parsed`);
       file.parsedData = data;
-      const layerNames = (data.layers || data.layer_table || []).map((l) => l.name || l.layer || l) || state.layerOptions;
-      const blockNames = (data.blocks || data.block_table || []).map((b) => b.name || b.block_name || b) || state.blockOptions;
+      const layerNames =
+        (data.layers || data.layer_table || []).map((l) => l.name || l.layer || l) || state.layerOptions;
+      const blockNames =
+        (data.blocks || data.block_table || []).map((b) => b.name || b.block_name || b) || state.blockOptions;
       if (layerNames.length) state.layerOptions = layerNames;
       if (blockNames.length) state.blockOptions = blockNames;
-      initSmartSelects();
+      if (!state.templateFile) state.templateFile = file;
+      if (!state.selectedOptions["template-file-select"] && state.templateFile) {
+        state.selectedOptions["template-file-select"] = [state.templateFile.name];
+      }
+      if (state.templateFile === file) {
+        state.selectedOptions["template-file-select"] = [file.name];
+        applyTemplateSelections();
+      } else {
+        initSmartSelects();
+      }
       updateResultList(true);
       renderResultView();
     }
