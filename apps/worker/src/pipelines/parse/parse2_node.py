@@ -165,10 +165,23 @@ def _collect_document_metadata(doc) -> dict[str, Any]:
 
 
 def _collect_header_metadata(doc) -> dict[str, Any]:
-    header = {}
-    for key, value in doc.header.items():
-        if key.startswith("$"):
-            header[key[1:]] = value
+    header: dict[str, Any] = {}
+    keys = []
+    try:
+        keys = list(doc.header.keys())
+    except Exception:
+        try:
+            keys = list(doc.header)
+        except Exception:
+            keys = []
+
+    for key in keys:
+        if not isinstance(key, str) or not key.startswith("$"):
+            continue
+        try:
+            header[key[1:]] = doc.header.get(key) if hasattr(doc.header, "get") else doc.header[key]
+        except Exception:
+            continue
     return {"section": "header", "header": header}
 
 
@@ -206,12 +219,13 @@ def _collect_table_linetypes(doc) -> list[dict[str, Any]]:
 def _collect_table_text_styles(doc) -> list[dict[str, Any]]:
     styles = []
     for style in doc.styles:
+        # 일부 DXF에서는 없는 필드 접근 시 ezdxf가 예외를 던지므로 getattr로 안전 접근
         styles.append(
             {
                 "name": style.dxf.name,
-                "font": style.dxf.get("font"),
-                "width_factor": style.dxf.get("width_factor"),
-                "oblique": style.dxf.get("oblique"),
+                "font": getattr(style.dxf, "font", None),
+                "width_factor": getattr(style.dxf, "width_factor", None),
+                "oblique": getattr(style.dxf, "oblique", None),
             }
         )
     return styles

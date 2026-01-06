@@ -5,6 +5,7 @@ services:
       POSTGRES_USER: laika
       POSTGRES_PASSWORD: laika
       POSTGRES_DB: laika
+      POSTGRES_HOST_AUTH_METHOD: md5
     ports:
       - "5432:5432"
     volumes:

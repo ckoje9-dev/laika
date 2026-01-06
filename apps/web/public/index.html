@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LAIKA</title>
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
+  <script src="/vendor/OrbitControls.js"></script>
   <script src="/vendor/three-dxf.js"></script>
+  <script src="/vendor/dxf-parser.js"></script>
   <style>
     :root {
       --bg: #f6f8fb;
@@ -726,6 +727,9 @@
       viewerLoading: null,
       parserLib: null,
       parserLoading: null,
+      fontLoader: null,
+      fontLoading: null,
+      font: null,
     };
 
     const statusCopy = {
@@ -1362,6 +1366,36 @@
       });
     }
 
+    function ensureFontLoader() {
+      if (state.fontLoader) return state.fontLoader;
+      if (window.THREE && window.THREE.FontLoader) {
+        state.fontLoader = new window.THREE.FontLoader();
+      }
+      return state.fontLoader;
+    }
+
+    async function ensureFont() {
+      if (state.font) return state.font;
+      const loader = ensureFontLoader();
+      if (!loader) return null;
+      if (!state.fontLoading) {
+        state.fontLoading = new Promise((resolve, reject) => {
+          loader.load(
+            "/vendor/helvetiker_regular.typeface.json",
+            (font) => resolve(font),
+            undefined,
+            (err) => reject(err)
+          );
+        });
+      }
+      try {
+        state.font = await state.fontLoading;
+      } catch (e) {
+        state.font = null;
+      }
+      return state.font;
+    }
+
     function resolveThreeDxf() {
       return window.ThreeDxf || window.threeDxf || null;
     }
@@ -1443,6 +1477,7 @@
       container.appendChild(canvas);
       const threeDxf = await ensureThreeDxf();
       const Parser = await ensureDxfParser();
+      const font = await ensureFont();
       if (!threeDxf || !Parser) {
         container.innerHTML =
           '<div class="muted" style="padding:12px;">뷰어/파서 스크립트를 불러오지 못했습니다. <a href="' +
@@ -1479,7 +1514,7 @@
       try {
         const width = container.clientWidth || container.offsetWidth || 600;
         const height = container.clientHeight || container.offsetHeight || 340;
-        const viewer = new threeDxf.Viewer(parsed, canvas, width, height);
+        const viewer = new threeDxf.Viewer(parsed, canvas, width, height, font || undefined);
         if (viewer.render) viewer.render();
         window.addEventListener("resize", () => viewer.resize && viewer.resize(container.clientWidth, container.clientHeight));
       } catch (err) {

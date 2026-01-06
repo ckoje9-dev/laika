@@ -29,14 +29,18 @@ PARSE1_TIMEOUT = int(os.getenv("DXF_PARSER_TIMEOUT", "120"))
 
 async def _node_parse(src: Path, output_path: Path) -> None:
     """node subprocess로 dxf-parser를 호출해 JSON으로 저장."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     script = r"""
 const fs = require('fs');
 const ParserMod = require(process.env.DXF_PARSER_LIB);
 const Parser = ParserMod.default || ParserMod;
 
 async function main() {
-  const input = process.argv[2];
-  const output = process.argv[3];
+  const input = process.env.DXF_PARSE_INPUT;
+  const output = process.env.DXF_PARSE_OUTPUT;
+  if (!input || !output) {
+    throw new Error("DXF_PARSE_INPUT or OUTPUT missing");
+  }
   const text = fs.readFileSync(input, 'utf8');
   const parser = new Parser();
   const data = parser.parseSync(text);
@@ -65,8 +69,10 @@ main().catch((err) => {
 """
     env = os.environ.copy()
     env["DXF_PARSER_LIB"] = str(DXF_PARSER_LIB)
-    cmd = [NODE_BIN, "-e", script, str(src), str(output_path)]
-    logger.info("1차 파싱(Node) 실행: %s", " ".join(cmd))
+    env["DXF_PARSE_INPUT"] = str(src)
+    env["DXF_PARSE_OUTPUT"] = str(output_path)
+    cmd = [NODE_BIN, "-e", script]
+    logger.info("1차 파싱(Node) 실행: %s input=%s output=%s", " ".join(cmd), src, output_path)
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,

@@ -11,7 +11,9 @@ RUN apt-get update && \
       build-essential \
       docker.io \
       docker-cli \
-      postgresql-client && \
+      postgresql-client \
+      nodejs \
+      npm && \
     rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md ./

@@ -75,6 +75,14 @@ def _meta_jsonl_path(file_row: db_models.File) -> Path | None:
     return STORAGE_DERIVED_PATH / f"{stem}_meta.jsonl"
 
 
+def _parse1_json_path(file_row: db_models.File) -> Path | None:
+    target = file_row.path_dxf or file_row.path_original
+    if not target:
+        return None
+    stem = Path(target).stem
+    return STORAGE_DERIVED_PATH / f"{stem}_parse1.json"
+
+
 def _load_jsonl(path: Path | None) -> list[dict]:
     if path is None or not path.exists():
         return []
@@ -102,6 +110,55 @@ def _load_json(path: Path | None) -> Any:
             return json.load(fp)
     except Exception:
         return None
+
+
+def _extract_layers_blocks_from_parse1(data: Any) -> tuple[list[str], list[str]]:
+    """parse1(원본 dxf-parser 결과)에서 레이어/블록 이름 추출."""
+    if not isinstance(data, dict):
+        return [], []
+    sections = data.get("sections", {}) if isinstance(data.get("sections", {}), dict) else {}
+    tables = sections.get("tables") or data.get("tables") or {}
+    blocks_section = sections.get("blocks") or data.get("blocks") or {}
+    layers = []
+    blocks = []
+    try:
+        raw_layers = None
+        if isinstance(tables, dict):
+            raw_layers = (
+                tables.get("layer", {}).get("layers")
+                or tables.get("layers")
+                or tables.get("LAYER", {}).get("layers")
+                or tables.get("layer")
+            )
+        if isinstance(raw_layers, dict):
+            raw_layers = raw_layers.get("layers") or list(raw_layers.values())
+        if isinstance(raw_layers, list):
+            for l in raw_layers:
+                if isinstance(l, dict):
+                    name = l.get("name") or l.get("layer")
+                else:
+                    name = l
+                if name:
+                    layers.append(str(name))
+    except Exception:
+        layers = []
+    try:
+        raw_blocks = blocks_section
+        if isinstance(raw_blocks, dict):
+            # dxf-parser blocks는 {name: {...}} 형태일 수도 있음
+            raw_blocks = list(raw_blocks.values())
+        if isinstance(raw_blocks, list):
+            for b in raw_blocks:
+                name = None
+                if isinstance(b, dict):
+                    name = b.get("name") or b.get("block") or b.get("id")
+                else:
+                    name = b
+                if name:
+                    blocks.append(str(name))
+    except Exception:
+        blocks = []
+    return layers, blocks
 
 
 @router.post("/init", response_model=UploadInitResponse, status_code=201)
@@ -236,10 +293,15 @@ async def get_parsed_preview(
     tables = None
     layers: list[dict] = []
     blocks: list[dict] = []
+    parse1_data = _load_json(_parse1_json_path(file_row))
     if metadata:
         tables_entry = next((m for m in metadata if isinstance(m, dict) and m.get("section") == "tables"), {})
         layers = tables_entry.get("layers") or []
         blocks = tables_entry.get("block_records") or []
+    elif parse1_data:
+        parse1_layers, parse1_blocks = _extract_layers_blocks_from_parse1(parse1_data)
+        layers = [{"name": n} for n in parse1_layers]
+        blocks = [{"name": n} for n in parse1_blocks]
 
     counts_stmt = (
         select(db_models.DxfEntityRaw.type, func.count())
@@ -324,12 +386,12 @@ async def enqueue_parse(file_id: str, session: AsyncSession = Depends(get_sessio
     enqueued = False
     message: str | None = None
     try:
-        enqueue("apps.worker.src.pipelines.parse.dxf_parse.run", file_id=file_id)
+        enqueue("apps.worker.src.pipelines.parse.parse1_node.run", file_id=file_id)
         enqueued = True
     except Exception as e:  # pragma: no cover - 큐 설정 오류 시 로그를 남기고 반환
         import logging
 
-        logging.getLogger(__name__).warning("dxf_parse enqueue 실패: %s", e)
+        logging.getLogger(__name__).warning("parse1 enqueue 실패: %s", e)
         message = str(e)
 
     return ParseResponse(file_id=file_id, enqueued=enqueued, message=message)
@@ -366,8 +428,8 @@ async def enqueue_parse2(file_id: str, session: AsyncSession = Depends(get_sessi
     enqueued = False
     message: str | None = None
     try:
-        # 비활성화 상태이므로 큐에 넣지 않고 바로 반환
-        message = "parse2 is disabled"
+        enqueue("apps.worker.src.pipelines.parse.dxf_parse2", file_id=file_id)
+        enqueued = True
     except Exception as e:  # pragma: no cover
         import logging
 
