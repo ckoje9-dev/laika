@@ -1191,10 +1191,16 @@
       initSmartSelects();
     }
 
-    async function loadParsed(file) {
+    async function loadEntitiesTable(file) {
       if (!file?.fileId) return;
-      const data = await api(`/uploads/${file.fileId}/parsed`);
-      file.parsedData = data;
+      const data = await api(`/uploads/${file.fileId}/entities-table`);
+      file.entitiesTable = Array.isArray(data.rows) ? data.rows : [];
+    }
+
+      async function loadParsed(file) {
+        if (!file?.fileId) return;
+        const data = await api(`/uploads/${file.fileId}/parsed`);
+        file.parsedData = data;
       const layerNames = Array.isArray(data.layers)
         ? data.layers.map((l) => l.name || l.layer || l).filter(Boolean)
         : [];
@@ -1264,8 +1270,16 @@
         btn.onclick = () => {
           state.selectedResult = f;
           updateResultList();
-          if (!f.parsedData && f.fileId) loadParsed(f);
-          else renderResultView();
+          if (!f.parsedData && f.fileId) {
+            loadParsed(f).catch(() => {});
+          }
+          if (!f.entitiesTable && f.fileId) {
+            loadEntitiesTable(f)
+              .catch(() => {})
+              .finally(renderResultView);
+          } else {
+            renderResultView();
+          }
         };
         list.appendChild(btn);
       });
@@ -1287,13 +1301,17 @@
       const counts = data.counts || data.metadata?.counts || {};
         const layers = data.layers || [];
         const blocks = data.blocks || [];
-      const entities = data.entities || data.entity_table || [];
-      const entityRows = entities.slice(0, 10).map(
-        (e, i) =>
-          `<tr><td>${e.id || i + 1}</td><td>${e.type || e.TYPE || "-"}</td><td>${e.layer || e.LAYER || "-"}</td><td>${
-            e.text || e.TEXT || "-"
-          }</td><td>${(e.coords || e.coordinates || []).join(" ") || "-"}</td></tr>`
-      );
+      const entitiesTable = Array.isArray(file.entitiesTable) ? file.entitiesTable : [];
+      const entitiesFallback = data.entities || data.entity_table || [];
+      const sourceRows = entitiesTable.length ? entitiesTable : entitiesFallback.slice(0, 10);
+      const entityRows = sourceRows.map((e, i) => {
+        const handle = e.handle || e.HANDLE || "-";
+        const dtype = e.type || e.TYPE || "-";
+        const layer = e.layer || e.LAYER || "-";
+        const text = e.text || e.TEXT || "-";
+        const coords = e.coordinates || e.coords || "-";
+        return `<tr><td>${handle}</td><td>${dtype}</td><td>${layer}</td><td>${text}</td><td>${coords}</td></tr>`;
+      });
 
       view.innerHTML = `
         <h3 style="margin:8px 0 6px;">파일: ${file.name} / 단위: ${data.unit || "mm"}</h3>
@@ -1335,7 +1353,7 @@
             </div>
             <div class="table-wrap" style="margin-top:8px;">
               <table>
-                <thead><tr><th>ID</th><th>TYPE</th><th>LAYER</th><th>TEXT</th><th>Coordinates</th></tr></thead>
+                <thead><tr><th>HANDLE</th><th>TYPE</th><th>LAYER</th><th>TEXT</th><th>COORDINATES</th></tr></thead>
                 <tbody>
                   ${entityRows.length ? entityRows.join("") : "<tr><td colspan='5'>엔티티 정보 없음</td></tr>"}
                 </tbody>
@@ -1626,6 +1644,9 @@
         }
         if (state.selectedResult && !state.selectedResult.parsedData) {
           await loadParsed(state.selectedResult);
+        }
+        if (state.selectedResult && !state.selectedResult.entitiesTable) {
+          await loadEntitiesTable(state.selectedResult);
         }
         $("resultSection").style.display = "grid";
         updateResultList(true);

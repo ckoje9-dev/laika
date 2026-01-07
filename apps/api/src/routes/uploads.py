@@ -1,6 +1,9 @@
 """업로드 초기화 및 변환/파싱 상태 조회 라우터."""
+import csv
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -83,6 +86,14 @@ def _parse1_json_path(file_row: db_models.File) -> Path | None:
     return STORAGE_DERIVED_PATH / f"{stem}_parse1.json"
 
 
+def _entities_csv_path(file_row: db_models.File) -> Path | None:
+    target = file_row.path_dxf or file_row.path_original
+    if not target:
+        return None
+    stem = Path(target).stem
+    return STORAGE_DERIVED_PATH / f"{stem}_entities.csv"
+
+
 def _load_jsonl(path: Path | None) -> list[dict]:
     if path is None or not path.exists():
         return []
@@ -110,6 +121,42 @@ def _load_json(path: Path | None) -> Any:
             return json.load(fp)
     except Exception:
         return None
+
+
+def _load_entities_csv(path: Path | None) -> list[dict]:
+    if path is None or not path.exists():
+        return []
+    try:
+        with path.open("r", encoding="utf-8") as fp:
+            reader = csv.DictReader(fp)
+            return [row for row in reader]
+    except OSError:
+        return []
+
+
+def _ensure_entities_csv(file_row: db_models.File) -> Path | None:
+    parse1_path = _parse1_json_path(file_row)
+    if not parse1_path or not parse1_path.exists():
+        return None
+    csv_path = _entities_csv_path(file_row)
+    if csv_path is None:
+        return None
+    if csv_path.exists():
+        return csv_path
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    base_dir = Path(__file__).resolve().parents[3]
+    script_path = base_dir / "worker" / "src" / "pipelines" / "parse" / "extract_entities_table.py"
+    try:
+        subprocess.run(
+            [sys.executable, str(script_path), str(parse1_path), str(csv_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = exc.stderr or exc.stdout or "entities table 생성 실패"
+        raise HTTPException(status_code=500, detail=detail) from exc
+    return csv_path
 
 
 @router.post("/init", response_model=UploadInitResponse, status_code=201)
@@ -312,6 +359,22 @@ async def get_parsed_preview(
         "blocks": blocks,
         "tables": tables,
         "tables_path": str(table_path) if table_path else None,
+    }
+
+
+@router.get("/{file_id}/entities-table")
+async def get_entities_table(file_id: str, session: AsyncSession = Depends(get_session)):
+    file_row = await session.get(db_models.File, file_id)
+    if not file_row:
+        raise HTTPException(status_code=404, detail="file not found")
+    csv_path = _ensure_entities_csv(file_row)
+    if not csv_path or not csv_path.exists():
+        raise HTTPException(status_code=404, detail="entities table not ready")
+    rows = _load_entities_csv(csv_path)
+    return {
+        "file_id": file_id,
+        "rows": rows,
+        "csv_path": str(csv_path),
     }
 
 
