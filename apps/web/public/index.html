@@ -393,6 +393,15 @@
       cursor: pointer;
       background: rgba(255,255,255,0.02);
     }
+    .acc-header::after {
+      content: "▾";
+      color: var(--muted);
+      font-size: 14px;
+      transition: opacity 0.2s ease;
+    }
+    .acc-header.open::after {
+      content: "▴";
+    }
     .acc-body {
       padding: 14px;
       border-top: 1px solid var(--border);
@@ -1144,7 +1153,7 @@
         arr.filter((name) => keys.some((k) => (name || "").toUpperCase().includes(k))).map((v) => v);
 
       const presets = {
-        "basic-border-block": { type: "block", keys: ["FORM", "TITLE"] },
+        "basic-border-block": { type: "block", keys: ["FORM", "TITLE", "BORD"] },
         "basic-dim-layer": { type: "layer", keys: ["DIM"] },
         "basic-symbol-layer": { type: "layer", keys: ["SYM"] },
         "basic-text-layer": { type: "layer", keys: ["TXT", "TEXT"] },
@@ -1272,49 +1281,42 @@
       );
 
       view.innerHTML = `
-        <div class="pill">AI 도면 분석 결과</div>
         <h3 style="margin:8px 0 6px;">파일: ${file.name} / 단위: ${data.unit || "mm"}</h3>
-        <div class="card" style="padding:10px; background: transparent; margin:8px 0; border:1px solid var(--border);">
-          <div class="muted" style="margin-bottom:6px;">도면 미리보기</div>
-          <div id="dxfPreview" class="preview-frame" style="position:relative; overflow:hidden; background:#f7faff;"></div>
-        </div>
+        <div id="dxfPreview" class="preview-frame" style="position:relative; overflow:hidden; background:#f7faff;"></div>
         <div class="accordion">
-          <div class="acc-header" data-acc="basic">DXF 기본 파싱 내용</div>
+          <div class="acc-header" data-acc="basic"><strong>DXF 기본 파싱 내용</strong></div>
           <div class="acc-body" id="acc-basic">
-            <div class="muted">총 엔티티 ${counts.total || entities.length || 0}EA</div>
-            <div class="actions-row" style="margin:8px 0;">
-              <button class="btn" onclick="window.open('${API_BASE}/uploads/${file.fileId}/parsed')">JSON 다운로드</button>
-              <button class="btn" onclick="alert('CSV 다운로드 API가 준비되면 연결합니다.')">CSV 다운로드</button>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>레이어명</th><th>색상</th></tr></thead>
-                <tbody>
-                  ${
-                    layers.length
-                      ? layers
-                          .slice(0, 15)
-                          .map((l) => `<tr><td>${l.name || l.layer || "-"}</td><td>${l.color || "-"}</td></tr>`)
-                          .join("")
-                      : "<tr><td colspan='2'>레이어 정보 없음</td></tr>"
-                  }
-                </tbody>
-              </table>
-            </div>
-            <div class="table-wrap" style="margin-top:8px;">
-              <table>
-                <thead><tr><th>블록명</th><th>개수</th></tr></thead>
-                <tbody>
-                  ${
-                    blocks.length
-                      ? blocks
-                          .slice(0, 15)
-                          .map((b) => `<tr><td>${b.name || b.block_name || "-"}</td><td>${b.count || b.total || "-"}</td></tr>`)
-                          .join("")
-                      : "<tr><td colspan='2'>블록 정보 없음</td></tr>"
-                  }
-                </tbody>
-              </table>
+            <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px;">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>레이어명</th><th>색상</th></tr></thead>
+                  <tbody>
+                    ${
+                      layers.length
+                        ? layers
+                            .slice(0, 15)
+                            .map((l) => `<tr><td>${l.name || l.layer || "-"}</td><td>${l.color || "-"}</td></tr>`)
+                            .join("")
+                        : "<tr><td colspan='2'>레이어 정보 없음</td></tr>"
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>블록명</th><th>개수</th></tr></thead>
+                  <tbody>
+                    ${
+                      blocks.length
+                        ? blocks
+                            .slice(0, 15)
+                            .map((b) => `<tr><td>${b.name || b.block_name || "-"}</td><td>${b.count || b.total || "-"}</td></tr>`)
+                            .join("")
+                        : "<tr><td colspan='2'>블록 정보 없음</td></tr>"
+                    }
+                  </tbody>
+                </table>
+              </div>
             </div>
             <div class="table-wrap" style="margin-top:8px;">
               <table>
@@ -1324,21 +1326,24 @@
                 </tbody>
               </table>
             </div>
+            <div class="actions-row" style="margin:8px 0 0; justify-content:flex-end;">
+              <button class="btn" onclick="window.open('${API_BASE}/uploads/${file.fileId}/parsed')">JSON 다운로드</button>
+              <button class="btn" onclick="alert('CSV 다운로드 API가 준비되면 연결합니다.')">CSV 다운로드</button>
+            </div>
           </div>
         </div>
         <div class="accordion">
-          <div class="acc-header" data-acc="ai">AI 분석 내용</div>
+          <div class="acc-header" data-acc="ai"><strong>AI 분석 내용</strong></div>
           <div class="acc-body" id="acc-ai">
-            <div class="muted">세부 설정에 따라 도출된 분석 리포트가 여기에 표시됩니다.</div>
-            <div class="actions-row" style="margin:8px 0;">
-              <button class="btn" onclick="alert('AI 결과 JSON 다운로드 API가 준비되면 연결합니다.')">JSON 다운로드</button>
-              <button class="btn" onclick="alert('AI 결과 CSV 다운로드 API가 준비되면 연결합니다.')">CSV 다운로드</button>
-            </div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>항목</th><th>값</th></tr></thead>
                 <tbody><tr><td>도곽 블록</td><td>${(state.selectedOptions["basic-border-block"] || []).join(", ") || "미지정"}</td></tr></tbody>
               </table>
+            </div>
+            <div class="actions-row" style="margin:8px 0 0; justify-content:flex-end;">
+              <button class="btn" onclick="alert('AI 결과 JSON 다운로드 API가 준비되면 연결합니다.')">JSON 다운로드</button>
+              <button class="btn" onclick="alert('AI 결과 CSV 다운로드 API가 준비되면 연결합니다.')">CSV 다운로드</button>
             </div>
           </div>
         </div>
@@ -1347,11 +1352,10 @@
       document.querySelectorAll(".acc-header").forEach((h) => {
         h.onclick = () => {
           const body = $("acc-" + h.dataset.acc);
-          body.classList.toggle("open");
+          const isOpen = body.classList.toggle("open");
+          h.classList.toggle("open", isOpen);
         };
       });
-      $("acc-basic")?.classList.add("open");
-      $("acc-ai")?.classList.add("open");
 
       renderDxfPreview(file);
     }
@@ -1430,7 +1434,9 @@
     }
 
     function resolveDxfParser() {
-      return window.DxfParser || window.DXFParser || null;
+      const mod = window.DxfParser || window.DXFParser || null;
+      if (!mod) return null;
+      return mod.default || mod.DxfParser || mod;
     }
 
     async function ensureDxfParser() {
