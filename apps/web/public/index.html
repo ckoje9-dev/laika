@@ -652,6 +652,9 @@
             <label>템플릿 DXF</label>
             <div class="smart-select compact-select" id="template-file-select" data-select-type="template"></div>
           </div>
+          <div class="actions-row" style="margin-top:10px;">
+            <button class="btn" id="btnParseDownload">파싱다운</button>
+          </div>
           <div class="config-columns">
             <div class="config-card">
               <h4>기본</h4>
@@ -912,10 +915,10 @@
       listEl.appendChild(addCard);
     }
 
-    function addFiles(kind, fileList) {
-      const allow = kind === "convert" ? [".dwg"] : [".dxf"];
-      const target = kind === "convert" ? state.convertFiles : state.analyzeFiles;
-      Array.from(fileList).forEach((f) => {
+      function addFiles(kind, fileList) {
+        const allow = kind === "convert" ? [".dwg"] : [".dxf"];
+        const target = kind === "convert" ? state.convertFiles : state.analyzeFiles;
+        Array.from(fileList).forEach((f) => {
         const ext = `.${(f.name.split(".").pop() || "").toLowerCase()}`;
         if (!allow.includes(ext)) {
           alert(`${allow.join(", ")} 확장자만 업로드할 수 있습니다.`);
@@ -933,10 +936,16 @@
           fileId: null,
           pathDxf: null,
           parsedData: null,
+          });
         });
-      });
-      renderFileList(kind);
-    }
+        renderFileList(kind);
+        if (kind === "analyze" && !state.templateFile && target.length > 0) {
+          state.templateFile = target[0];
+          state.selectedResult = target[0];
+          state.selectedOptions["template-file-select"] = [target[0].name];
+          initSmartSelects();
+        }
+      }
 
     function bindDropzone(el, kind) {
       ["dragenter", "dragover"].forEach((evt) =>
@@ -1012,7 +1021,12 @@
                 if (type === "template") {
                   selected.clear();
                   if (input.checked) selected.add(opt);
-                  state.templateFile = (state.analyzeFiles || []).find((f) => f.name === opt) || state.templateFile;
+                  const nextTemplate = (state.analyzeFiles || []).find((f) => f.name === opt);
+                  if (nextTemplate) {
+                    state.templateFile = nextTemplate;
+                    state.selectedResult = nextTemplate;
+                    loadParsed(nextTemplate).catch(() => {});
+                  }
                   state.selectedOptions[id] = Array.from(selected);
                   applyTemplateSelections();
                   closeAll();
@@ -1181,22 +1195,23 @@
       if (!file?.fileId) return;
       const data = await api(`/uploads/${file.fileId}/parsed`);
       file.parsedData = data;
-      const layerNames =
-        (data.layers || data.layer_table || []).map((l) => l.name || l.layer || l) || state.layerOptions;
-      const blockNames =
-        (data.blocks || data.block_table || []).map((b) => b.name || b.block_name || b) || state.blockOptions;
-      if (layerNames.length) state.layerOptions = layerNames;
-      if (blockNames.length) state.blockOptions = blockNames;
+      const layerNames = Array.isArray(data.layers)
+        ? data.layers.map((l) => l.name || l.layer || l).filter(Boolean)
+        : [];
+      const blockNames = Array.isArray(data.blocks)
+        ? data.blocks.map((b) => b.name || b.block_name || b).filter(Boolean)
+        : [];
+      const isTemplate = !state.templateFile || state.templateFile === file;
       if (!state.templateFile) state.templateFile = file;
-      if (!state.selectedOptions["template-file-select"] && state.templateFile) {
+      if (isTemplate) {
+        if (layerNames.length) state.layerOptions = layerNames;
+        if (blockNames.length) state.blockOptions = blockNames;
+        state.selectedOptions["template-file-select"] = [state.templateFile.name];
+        applyTemplateSelections();
+      } else if (!state.selectedOptions["template-file-select"] && state.templateFile) {
         state.selectedOptions["template-file-select"] = [state.templateFile.name];
       }
-      if (state.templateFile === file) {
-        state.selectedOptions["template-file-select"] = [file.name];
-        applyTemplateSelections();
-      } else {
-        initSmartSelects();
-      }
+      initSmartSelects();
       updateResultList(true);
       renderResultView();
     }
@@ -1213,10 +1228,10 @@
         alert("버전 생성에 실패했습니다. " + e.message);
         if (btn) btn.disabled = false;
       });
-      if (!versionId) return;
-      for (const file of state.analyzeFiles) {
-        try {
-          await uploadOne(file, versionId);
+        if (!versionId) return;
+        for (const file of state.analyzeFiles) {
+          try {
+            await uploadOne(file, versionId);
           await api(`/uploads/${file.fileId}/parse`, { method: "POST" });
           await pollStatus(file, "analyze");
         } catch (err) {
@@ -1270,8 +1285,8 @@
       }
       const data = file.parsedData;
       const counts = data.counts || data.metadata?.counts || {};
-      const layers = data.layers || data.layer_table || [];
-      const blocks = data.blocks || data.block_table || [];
+        const layers = data.layers || [];
+        const blocks = data.blocks || [];
       const entities = data.entities || data.entity_table || [];
       const entityRows = entities.slice(0, 10).map(
         (e, i) =>
@@ -1540,6 +1555,16 @@
       $("btnLogin").onclick = () => (state.loggedIn ? doLogout() : setTab("login"));
       $("btnSignup").onclick = () => setTab(state.loggedIn ? "home" : "signup");
       $("btnDoLogin").onclick = () => doLogin($("loginId").value.trim(), $("loginPwd").value);
+      ["loginId", "loginPwd"].forEach((id) => {
+        const el = $(id);
+        if (!el) return;
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            doLogin($("loginId").value.trim(), $("loginPwd").value);
+          }
+        });
+      });
       $("btnDoSignup").onclick = () => doSignup($("signupId").value.trim(), $("signupPwd").value, $("signupPwd2").value);
       $("btnSubscribe").onclick = () => {
         if (!state.loggedIn) {
@@ -1586,6 +1611,11 @@
         }
       };
       $("btnParse").onclick = startParse;
+      $("btnParseDownload").onclick = () => {
+        const file = state.templateFile || state.selectedResult || state.analyzeFiles[0];
+        if (!file?.fileId) return alert("파싱 결과를 다운로드할 파일을 선택하세요.");
+        window.open(`${API_BASE}/uploads/${file.fileId}/parse1-download`, "_blank");
+      };
       $("btnAnalyze").onclick = async () => {
         if (!state.loggedIn) return alert("로그인 후 이용 가능합니다.");
         if (state.analyzeFiles.length === 0) return alert("분석할 DXF 파일을 먼저 업로드하세요.");

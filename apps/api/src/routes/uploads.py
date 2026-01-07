@@ -112,55 +112,6 @@ def _load_json(path: Path | None) -> Any:
         return None
 
 
-def _extract_layers_blocks_from_parse1(data: Any) -> tuple[list[str], list[str]]:
-    """parse1(원본 dxf-parser 결과)에서 레이어/블록 이름 추출."""
-    if not isinstance(data, dict):
-        return [], []
-    sections = data.get("sections", {}) if isinstance(data.get("sections", {}), dict) else {}
-    tables = sections.get("tables") or data.get("tables") or {}
-    blocks_section = sections.get("blocks") or data.get("blocks") or {}
-    layers = []
-    blocks = []
-    try:
-        raw_layers = None
-        if isinstance(tables, dict):
-            raw_layers = (
-                tables.get("layer", {}).get("layers")
-                or tables.get("layers")
-                or tables.get("LAYER", {}).get("layers")
-                or tables.get("layer")
-            )
-        if isinstance(raw_layers, dict):
-            raw_layers = raw_layers.get("layers") or list(raw_layers.values())
-        if isinstance(raw_layers, list):
-            for l in raw_layers:
-                if isinstance(l, dict):
-                    name = l.get("name") or l.get("layer")
-                else:
-                    name = l
-                if name:
-                    layers.append(str(name))
-    except Exception:
-        layers = []
-    try:
-        raw_blocks = blocks_section
-        if isinstance(raw_blocks, dict):
-            # dxf-parser blocks는 {name: {...}} 형태일 수도 있음
-            raw_blocks = list(raw_blocks.values())
-        if isinstance(raw_blocks, list):
-            for b in raw_blocks:
-                name = None
-                if isinstance(b, dict):
-                    name = b.get("name") or b.get("block") or b.get("id")
-                else:
-                    name = b
-                if name:
-                    blocks.append(str(name))
-    except Exception:
-        blocks = []
-    return layers, blocks
-
-
 @router.post("/init", response_model=UploadInitResponse, status_code=201)
 async def init_upload(payload: UploadInitRequest, session: AsyncSession = Depends(get_session)):
     # 버전 존재 확인
@@ -276,6 +227,17 @@ async def download_file(file_id: str, kind: str = "dxf", session: AsyncSession =
     raise HTTPException(status_code=400, detail="unsupported kind")
 
 
+@router.get("/{file_id}/parse1-download")
+async def download_parse1(file_id: str, session: AsyncSession = Depends(get_session)):
+    file_row = await session.get(db_models.File, file_id)
+    if not file_row:
+        raise HTTPException(status_code=404, detail="file not found")
+    parse1_path = _parse1_json_path(file_row)
+    if not parse1_path or not parse1_path.exists():
+        raise HTTPException(status_code=404, detail="parse1 not ready")
+    return FileResponse(parse1_path, media_type="application/json", filename=parse1_path.name)
+
+
 @router.get("/{file_id}/parsed")
 async def get_parsed_preview(
     file_id: str,
@@ -295,21 +257,13 @@ async def get_parsed_preview(
     blocks: list[dict] = []
     sections_row = await session.get(db_models.DxfParseSection, file_id)
 
-    # dxf_parse_sections (tables/blocks)만 사용
+    # dxf_parse_sections: sections.tables.layer.layers / sections.blocks 의 key만 사용
     if sections_row:
-        try:
-            extracted = {
-                "sections": {
-                    "tables": sections_row.tables,
-                    "blocks": sections_row.blocks,
-                }
-            }
-            sec_layers, sec_blocks = _extract_layers_blocks_from_parse1(extracted)
-            layers = [{"name": n} for n in sec_layers]
-            blocks = [{"name": n} for n in sec_blocks]
-        except Exception:
-            layers = []
-            blocks = []
+        tables = sections_row.tables if isinstance(sections_row.tables, dict) else {}
+        layer_dict = tables.get("layer", {}).get("layers") if isinstance(tables.get("layer"), dict) else None
+        layers = [{"name": k} for k in layer_dict.keys() if k] if isinstance(layer_dict, dict) else []
+        block_dict = sections_row.blocks if isinstance(sections_row.blocks, dict) else {}
+        blocks = [{"name": k} for k in block_dict.keys() if k]
 
     # dxf_parse_sections를 유일한 소스로 사용
 
@@ -368,29 +322,13 @@ async def enqueue_parse(file_id: str, session: AsyncSession = Depends(get_sessio
     if not file_row:
         raise HTTPException(status_code=404, detail="file not found")
 
-    # DXF 업로드인데 path_dxf가 비어있는 경우 path_original을 그대로 사용하도록 보정
-    if not file_row.path_dxf and file_row.type == "dxf" and file_row.path_original:
+    # DXF만 처리하므로 path_dxf가 비어있으면 path_original을 사용
+    if not file_row.path_dxf and file_row.path_original:
         file_row.path_dxf = file_row.path_original
         await session.commit()
 
-    # DWG인 경우 변환이 안된 상태라면 변환+파싱 파이프라인을 큐에 넣는다.
-    if not file_row.path_dxf and file_row.type == "dwg":
-        enqueued = False
-        message: str | None = None
-        try:
-            enqueue("apps.worker.src.pipelines.convert.convert_and_parse.run", file_id=file_id)
-            enqueued = True
-            message = "DWG 변환 후 파싱을 위한 파이프라인을 실행했습니다."
-        except Exception as e:  # pragma: no cover - 큐 설정 오류 시 로그를 남기고 반환
-            import logging
-
-            logging.getLogger(__name__).warning("convert_and_parse enqueue 실패: %s", e)
-            message = str(e)
-
-        return ParseResponse(file_id=file_id, enqueued=enqueued, message=message, parsed=None)
-
     if not file_row.path_dxf:
-        raise HTTPException(status_code=400, detail="DXF가 아직 생성되지 않았습니다. 변환 완료 후 파싱하세요.")
+        raise HTTPException(status_code=400, detail="DXF 경로가 없습니다. 파일 업로드를 확인하세요.")
 
     enqueued = False
     message: str | None = None
