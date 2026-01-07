@@ -293,42 +293,25 @@ async def get_parsed_preview(
     tables = None
     layers: list[dict] = []
     blocks: list[dict] = []
-    parse1_data = _load_json(_parse1_json_path(file_row))
     sections_row = await session.get(db_models.DxfParseSection, file_id)
-    if metadata:
-        tables_entry = next((m for m in metadata if isinstance(m, dict) and m.get("section") == "tables"), {})
-        layers = tables_entry.get("layers") or []
-        blocks = tables_entry.get("block_records") or []
-    elif parse1_data:
-        parse1_layers, parse1_blocks = _extract_layers_blocks_from_parse1(parse1_data)
-        layers = [{"name": n} for n in parse1_layers]
-        blocks = [{"name": n} for n in parse1_blocks]
 
-    # 섹션 테이블 기반 레이어/블록(1차 파싱 기준)
+    # dxf_parse_sections (tables/blocks)만 사용
     if sections_row:
         try:
-            if not layers and sections_row.tables:
-                raw_layers = (
-                    sections_row.tables.get("layer", {}).get("layers")
-                    or sections_row.tables.get("layers")
-                    or sections_row.tables.get("layer")
-                )
-                if isinstance(raw_layers, dict):
-                    raw_layers = raw_layers.get("layers") or list(raw_layers.values())
-                if isinstance(raw_layers, list):
-                    layers = [{"name": (l.get("name") if isinstance(l, dict) else l)} for l in raw_layers if (l.get("name") if isinstance(l, dict) else l)]
-            if not blocks and sections_row.blocks:
-                raw_blocks = sections_row.blocks
-                if isinstance(raw_blocks, dict):
-                    raw_blocks = list(raw_blocks.values())
-                if isinstance(raw_blocks, list):
-                    blocks = [
-                        {"name": (b.get("name") if isinstance(b, dict) else b)}
-                        for b in raw_blocks
-                        if (b.get("name") if isinstance(b, dict) else b)
-                    ]
+            extracted = {
+                "sections": {
+                    "tables": sections_row.tables,
+                    "blocks": sections_row.blocks,
+                }
+            }
+            sec_layers, sec_blocks = _extract_layers_blocks_from_parse1(extracted)
+            layers = [{"name": n} for n in sec_layers]
+            blocks = [{"name": n} for n in sec_blocks]
         except Exception:
-            pass
+            layers = []
+            blocks = []
+
+    # dxf_parse_sections를 유일한 소스로 사용
 
     use_sections_entities = bool(sections_row and isinstance(sections_row.entities, list))
     if use_sections_entities:
