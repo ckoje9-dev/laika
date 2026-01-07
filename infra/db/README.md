@@ -13,4 +13,4 @@ alembic upgrade head
 구성
 - `alembic.ini` : Alembic 설정
 - `migrations/env.py` : DB 연결/컨텍스트
-- `migrations/versions/0001_initial.py` : 초기 스키마 (projects, versions, files, conversion_logs, dxf_entities_raw, semantic_objects, project_stats, qa_history)
+- `migrations/versions/0001_initial.py` : 초기 스키마 (projects, versions, files, conversion_logs, semantic_objects, project_stats, qa_history)

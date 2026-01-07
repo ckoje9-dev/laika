@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import tempfile
 import zipfile
@@ -294,6 +294,7 @@ async def get_parsed_preview(
     layers: list[dict] = []
     blocks: list[dict] = []
     parse1_data = _load_json(_parse1_json_path(file_row))
+    sections_row = await session.get(db_models.DxfParseSection, file_id)
     if metadata:
         tables_entry = next((m for m in metadata if isinstance(m, dict) and m.get("section") == "tables"), {})
         layers = tables_entry.get("layers") or []
@@ -303,40 +304,65 @@ async def get_parsed_preview(
         layers = [{"name": n} for n in parse1_layers]
         blocks = [{"name": n} for n in parse1_blocks]
 
-    counts_stmt = (
-        select(db_models.DxfEntityRaw.type, func.count())
-        .where(db_models.DxfEntityRaw.file_id == file_id)
-        .group_by(db_models.DxfEntityRaw.type)
-    )
-    counts_result = await session.execute(counts_stmt)
-    counts = {t: c for t, c in counts_result.all()}
+    # 섹션 테이블 기반 레이어/블록(1차 파싱 기준)
+    if sections_row:
+        try:
+            if not layers and sections_row.tables:
+                raw_layers = (
+                    sections_row.tables.get("layer", {}).get("layers")
+                    or sections_row.tables.get("layers")
+                    or sections_row.tables.get("layer")
+                )
+                if isinstance(raw_layers, dict):
+                    raw_layers = raw_layers.get("layers") or list(raw_layers.values())
+                if isinstance(raw_layers, list):
+                    layers = [{"name": (l.get("name") if isinstance(l, dict) else l)} for l in raw_layers if (l.get("name") if isinstance(l, dict) else l)]
+            if not blocks and sections_row.blocks:
+                raw_blocks = sections_row.blocks
+                if isinstance(raw_blocks, dict):
+                    raw_blocks = list(raw_blocks.values())
+                if isinstance(raw_blocks, list):
+                    blocks = [
+                        {"name": (b.get("name") if isinstance(b, dict) else b)}
+                        for b in raw_blocks
+                        if (b.get("name") if isinstance(b, dict) else b)
+                    ]
+        except Exception:
+            pass
 
-    total_stmt = select(func.count()).where(db_models.DxfEntityRaw.file_id == file_id)
-    total = (await session.execute(total_stmt)).scalar_one()
+    use_sections_entities = bool(sections_row and isinstance(sections_row.entities, list))
+    if use_sections_entities:
+        src_entities = sections_row.entities
+        total = len(src_entities)
+        counts: dict[str, int] = {}
+        for ent in src_entities:
+            if isinstance(ent, dict):
+                dtype = ent.get("type")
+                if dtype:
+                    counts[str(dtype)] = counts.get(str(dtype), 0) + 1
+        slice_start = offset or 0
+        slice_end = slice_start + limit if limit is not None else None
+        sliced = src_entities[slice_start:slice_end]
+        entities = []
+        for idx, ent in enumerate(sliced, start=slice_start + 1):
+            if not isinstance(ent, dict):
+                continue
+            entities.append(
+                {
+                    "id": idx,
+                    "type": ent.get("type"),
+                    "layer": ent.get("layer") or ent.get("layerName"),
+                    "length": None,
+                    "area": None,
+                    "properties": ent,
+                }
+            )
+    else:
+        counts = {}
+        total = 0
+        entities = []
 
-    entities_stmt = select(
-        db_models.DxfEntityRaw.id,
-        db_models.DxfEntityRaw.type,
-        db_models.DxfEntityRaw.layer,
-        db_models.DxfEntityRaw.length,
-        db_models.DxfEntityRaw.area,
-        db_models.DxfEntityRaw.properties,
-    ).where(db_models.DxfEntityRaw.file_id == file_id).order_by(db_models.DxfEntityRaw.id).offset(offset)
-    if limit is not None:
-        entities_stmt = entities_stmt.limit(limit)
-    entity_rows = await session.execute(entities_stmt)
-    entities = []
-    for rid, dtype, layer, length, area, props in entity_rows.all():
-        entities.append(
-            {
-                "id": rid,
-                "type": dtype,
-                "layer": layer,
-                "length": float(length) if length is not None else None,
-                "area": float(area) if area is not None else None,
-                "properties": props,
-            }
-        )
+    # dxf_entities_raw를 더 이상 사용하지 않음
 
     return {
         "file_id": file_id,

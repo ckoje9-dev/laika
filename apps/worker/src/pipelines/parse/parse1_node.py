@@ -51,6 +51,7 @@ async function main() {
       blocks: data.blocks || null,
       objects: data.objects || null,
       classes: data.classes || null,
+      thumbnail: data.thumbnail || null,
     },
     entities: data.entities || [],
     metadata: {
@@ -140,20 +141,91 @@ async def run(file_id: Optional[str] = None, src: Optional[Path] = None, output_
                 await session.commit()
         return None
 
+    # dxf-parser 결과를 DB에 적재 (type/layer/properties만 저장)
     if file_id:
+        try:
+            with out_path.open("r", encoding="utf-8") as fp:
+                data = json.load(fp)
+        except Exception:
+            data = {}
+
+        sections = data.get("sections") if isinstance(data, dict) else {}
+        if not isinstance(sections, dict):
+            sections = {}
+        entities = data.get("entities") if isinstance(data, dict) else None
+        if not isinstance(entities, list):
+            entities = []
+
+        layer_names = set()
+        tables = sections.get("tables") if isinstance(sections, dict) else None
+        if isinstance(tables, dict):
+            raw_layers = (
+                tables.get("layer", {}).get("layers")
+                or tables.get("layers")
+                or tables.get("layer")
+            )
+            if isinstance(raw_layers, dict):
+                raw_layers = raw_layers.get("layers") or list(raw_layers.values())
+            if isinstance(raw_layers, list):
+                for l in raw_layers:
+                    name = l.get("name") if isinstance(l, dict) else l
+                    if name:
+                        layer_names.add(str(name))
+        if not layer_names:
+            for ent in entities:
+                if not isinstance(ent, dict):
+                    continue
+                layer = ent.get("layer") or ent.get("layerName")
+                if layer:
+                    layer_names.add(str(layer))
+
         async with SessionLocal() as session:
             try:
+                await session.execute(text("delete from dxf_parse_sections where file_id = :file_id"), {"file_id": file_id})
+                session.add(
+                    models.DxfParseSection(
+                        file_id=file_id,
+                        header=sections.get("header"),
+                        classes=sections.get("classes"),
+                        tables=sections.get("tables"),
+                        blocks=sections.get("blocks"),
+                        entities=entities,
+                        objects=sections.get("objects"),
+                        thumbnail=sections.get("thumbnail"),
+                    )
+                )
                 await session.execute(
                     text(
                         """
-                        insert into conversion_logs (file_id, status, started_at, finished_at, message)
-                        values (:file_id, 'success', now(), now(), :path)
+                        update files set
+                            layer_count = :layers,
+                            entity_count = :entities
+                        where id = :file_id
                         """
                     ),
-                    {"file_id": file_id, "path": str(out_path)},
+                    {
+                        "layers": len(layer_names),
+                        "entities": len(entities),
+                        "file_id": file_id,
+                    },
+                )
+                await session.execute(
+                    text(
+                        """
+                        insert into conversion_logs (file_id, status, started_at, finished_at, layer_count, entity_count, message)
+                        values (:file_id, 'success', now(), now(), :layers, :entities, :path)
+                        """
+                    ),
+                    {
+                        "file_id": file_id,
+                        "layers": len(layer_names),
+                        "entities": len(entities),
+                        "path": str(out_path),
+                    },
                 )
                 await session.commit()
             except SQLAlchemyError:
                 await session.rollback()
-                logger.warning("parse1 로그 기록 실패: file_id=%s", file_id)
+                logger.warning("parse1 DB 적재 실패: file_id=%s", file_id)
+
     return out_path

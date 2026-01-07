@@ -13,7 +13,6 @@ try:
 except ImportError:  # pragma: no cover
     ezdxf = None
 
-from geoalchemy2 import WKTElement
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from packages.db.src.session import SessionLocal
@@ -373,48 +372,8 @@ async def run(file_id: Optional[str] = None, src: Optional[Path] = None, jsonl_p
         logger.warning("file_id가 없어 엔티티 DB 저장을 건너뜁니다. (파일: %s)", src)
         return
 
-    msp = doc.modelspace()
-    entities: list[models.DxfEntityRaw] = []
-    for entity in msp:
-        dtype = entity.dxftype()
-        if dtype not in (
-            "LINE",
-            "LWPOLYLINE",
-            "POLYLINE",
-            "CIRCLE",
-            "ARC",
-            "ELLIPSE",
-            "TEXT",
-            "MTEXT",
-            "HATCH",
-            "DIMENSION",
-            "INSERT",
-            "BLOCK",
-        ):
-            continue
-
-        bbox = entity.bbox() if hasattr(entity, "bbox") else None
-        bbox_wkt = _bbox_to_wkt(bbox)
-        geom_wkt = _geom_wkt(entity)
-        length = _entity_length(entity)
-        area = _entity_area(entity)
-
-        rec = models.DxfEntityRaw(
-            file_id=file_id,
-            type=dtype,
-            layer=entity.dxf.layer if hasattr(entity, "dxf") else None,
-            geom=WKTElement(geom_wkt, srid=models.SRID_LOCAL_CAD) if geom_wkt else None,
-            bbox=WKTElement(bbox_wkt, srid=models.SRID_LOCAL_CAD) if bbox_wkt else None,
-            length=_mm_to_m(length),
-            area=_area_mm2_to_m2(area),
-            properties=_json_safe(_entity_properties(entity)),
-        )
-        entities.append(rec)
-
     async with SessionLocal() as session:
         try:
-            await session.execute(text("delete from dxf_entities_raw where file_id = :file_id"), {"file_id": file_id})
-            session.add_all(entities)
             await session.execute(
                 text(
                     """
@@ -444,7 +403,7 @@ async def run(file_id: Optional[str] = None, src: Optional[Path] = None, jsonl_p
                 },
             )
             await session.commit()
-            logger.info("DXF 2차 파싱 완료 및 DB 저장: %s (entities=%s)", file_id, len(entities))
+            logger.info("DXF 2차 파싱 완료: %s", file_id)
         except SQLAlchemyError as e:
             await session.rollback()
             logger.exception("DB 저장 중 오류: %s", e)

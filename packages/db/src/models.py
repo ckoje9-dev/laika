@@ -64,18 +64,17 @@ class ConversionLog(Base):
     entity_count: Mapped[int | None] = mapped_column(Integer)
 
 
-class DxfEntityRaw(Base):
-    __tablename__ = "dxf_entities_raw"
+class DxfParseSection(Base):
+    __tablename__ = "dxf_parse_sections"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    file_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("files.id", ondelete="CASCADE"), nullable=False)
-    type: Mapped[str] = mapped_column(Text, nullable=False)
-    layer: Mapped[str | None] = mapped_column(Text)
-    geom = mapped_column(Geometry(geometry_type="GEOMETRY", srid=SRID_LOCAL_CAD), nullable=True)
-    bbox = mapped_column(Geometry(geometry_type="GEOMETRY", srid=SRID_LOCAL_CAD), nullable=True)
-    length: Mapped[Numeric | None] = mapped_column(Numeric)
-    area: Mapped[Numeric | None] = mapped_column(Numeric)
-    properties = mapped_column(JSONB, nullable=True)
+    file_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("files.id", ondelete="CASCADE"), primary_key=True)
+    header = mapped_column(JSONB, nullable=True)
+    classes = mapped_column(JSONB, nullable=True)
+    tables = mapped_column(JSONB, nullable=True)
+    blocks = mapped_column(JSONB, nullable=True)
+    entities = mapped_column(JSONB, nullable=True)
+    objects = mapped_column(JSONB, nullable=True)
+    thumbnail = mapped_column(JSONB, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=sa.text("now()"))
 
 
