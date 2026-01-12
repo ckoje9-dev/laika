@@ -440,6 +440,28 @@
     .table-wrap.sticky-table td {
       background: var(--surface-2);
     }
+    .table-wrap.sticky-table th.col-handle,
+    .table-wrap.sticky-table td.col-handle { width: 90px; }
+    .table-wrap.sticky-table th.col-type,
+    .table-wrap.sticky-table td.col-type { width: 90px; }
+    .table-wrap.sticky-table th.col-layer,
+    .table-wrap.sticky-table td.col-layer { width: 140px; }
+    .table-wrap.sticky-table th.col-coord,
+    .table-wrap.sticky-table td.col-coord { width: 110px; text-align: left; }
+    .table-wrap.sticky-table th.col-text,
+    .table-wrap.sticky-table td.col-text { width: 180px; }
+    .table-wrap.sticky-table th.col-name,
+    .table-wrap.sticky-table td.col-name { width: 140px; }
+    .table-wrap.sticky-table th.col-radius,
+    .table-wrap.sticky-table td.col-radius { width: 100px; text-align: left; }
+    .table-wrap.sticky-table th.col-dim,
+    .table-wrap.sticky-table td.col-dim { width: 100px; text-align: left; }
+    .table-wrap.sticky-table th { text-align: center; }
+    .table-wrap.sticky-table td { text-align: left; }
+    .table-wrap.sticky-table td.col-handle { text-align: center; }
+    .table-wrap.sticky-table th.col-coord,
+    .table-wrap.sticky-table th.col-radius,
+    .table-wrap.sticky-table th.col-dim { text-align: center; }
     .preview-frame {
       width: 100%;
       height: 340px;
@@ -661,12 +683,10 @@
         <div class="card" style="grid-column: span 2;">
           <h3>세부 설정</h3>
           <div class="muted">템플릿 DXF를 선택하면 자동 지정 후 필요 시 세부 요소를 수정할 수 있습니다.</div>
-          <div class="row-select" style="grid-template-columns: 140px 1fr; margin-top:10px;">
+          <div class="row-select" style="grid-template-columns: 140px 1fr auto; margin-top:10px;">
             <label>템플릿 DXF</label>
             <div class="smart-select compact-select" id="template-file-select" data-select-type="template"></div>
-          </div>
-          <div class="actions-row" style="margin-top:10px;">
-            <button class="btn" id="btnParseDownload">파싱다운</button>
+            <button class="btn" id="btnParseDownload">json 다운로드</button>
           </div>
           <div class="config-columns">
             <div class="config-card">
@@ -1350,15 +1370,8 @@
         : sourceRows.length
         ? Object.keys(sourceRows[0])
         : [];
-      const allowedBaseColumns = ["handle", "type", "layer", "text", "name", "radius", "actualMeasurement"];
-      const baseColumns = columns
-        .filter((c) => !hiddenColumns.has(String(c).toLowerCase()))
-        .filter((c) => allowedBaseColumns.includes(String(c)));
-      const baseColumnsOrdered = ["handle", "type", "layer"].concat(
-        baseColumns.filter((c) => !["handle", "type", "layer"].includes(String(c)))
-      );
-      const coordColumnsHeader = ["coord_x", "coord_y", "coord_z"];
-      const visibleColumns = baseColumnsOrdered.concat(coordColumnsHeader);
+      const baseColumnsOrdered = ["handle", "type", "layer", "text", "name", "radius", "actualMeasurement"];
+      const visibleColumns = ["handle", "type", "layer", "coord_x", "coord_y", "coord_z", "text", "name", "radius", "actualMeasurement"];
       const roundNumbers = (value) => {
         if (typeof value === "number") {
           return Math.round(value * 10000) / 10000;
@@ -1436,8 +1449,23 @@
         return value;
       };
       const colSpan = Math.max(visibleColumns.length, 1);
-      const headerCells = visibleColumns.map((c) => `<th>${c}</th>`).join("");
+      const columnClass = (c) => {
+        if (c === "handle") return "col-handle";
+        if (c === "type") return "col-type";
+        if (c === "layer") return "col-layer";
+        if (c === "text") return "col-text";
+        if (c === "name") return "col-name";
+        if (c === "radius") return "col-radius";
+        if (c === "actualMeasurement") return "col-dim";
+        if (c.startsWith("coord_")) return "col-coord";
+        return "";
+      };
+      const headerLabel = (c) => (c === "actualMeasurement" ? "dim" : c);
+      const headerCells = visibleColumns
+        .map((c) => `<th class="${columnClass(c)}">${headerLabel(c)}</th>`)
+        .join("");
       const baseColumnSet = new Set(baseColumnsOrdered);
+      const csvRows = [];
       const entityRows = sourceRows.flatMap((e) => {
         const coordRows = extractCoordRows(e);
         const rowSpan = coordRows.length || 1;
@@ -1446,26 +1474,40 @@
             const isCoord = c.startsWith("coord_");
             if (isCoord) {
               const raw = coord ? coord[c] : null;
-              return `<td>${formatCellValue(raw)}</td>`;
+                return `<td class="${columnClass(c)}">${formatCellValue(raw)}</td>`;
             }
             if (!includeBase) {
               return null;
             }
             if (baseColumnSet.has(c) && rowSpan > 1) {
               const raw = e?.[c];
-              return `<td rowspan="${rowSpan}">${formatCellValue(raw)}</td>`;
+              return `<td class="${columnClass(c)}" rowspan="${rowSpan}">${formatCellValue(raw)}</td>`;
             }
             const raw = e?.[c];
-            return `<td>${formatCellValue(raw)}</td>`;
+            return `<td class="${columnClass(c)}">${formatCellValue(raw)}</td>`;
+          });
+        const renderCsvRow = (coord, includeBase) =>
+          visibleColumns.map((c) => {
+            const isCoord = c.startsWith("coord_");
+            if (isCoord) {
+              return formatCellValue(coord ? coord[c] : null);
+            }
+            if (!includeBase) {
+              return "";
+            }
+            return formatCellValue(e?.[c]);
           });
         if (!coordRows.length) {
+          csvRows.push(renderCsvRow(null, true));
           return [`<tr>${renderRow(null, true).filter(Boolean).join("")}</tr>`];
         }
         return coordRows.map((coord, idx) => {
+          csvRows.push(renderCsvRow(coord, idx === 0));
           const cells = renderRow(coord, idx === 0).filter(Boolean);
           return `<tr>${cells.join("")}</tr>`;
         });
       });
+      file.entityTableView = { columns: visibleColumns, rows: csvRows };
 
       view.innerHTML = `
         <h3 style="margin:8px 0 6px;">파일: ${file.name} / 단위: ${data.unit || "mm"}</h3>
@@ -1482,8 +1524,7 @@
               </table>
             </div>
             <div class="actions-row" style="margin:8px 0 0; justify-content:flex-end;">
-              <button class="btn" onclick="window.open('${API_BASE}/uploads/${file.fileId}/parsed')">JSON 다운로드</button>
-              <button class="btn" onclick="alert('CSV 다운로드 API가 준비되면 연결합니다.')">CSV 다운로드</button>
+              <button class="btn" onclick="downloadEntitiesCsv()">CSV 다운로드</button>
             </div>
           </div>
         </div>
@@ -1513,6 +1554,41 @@
       });
 
       renderDxfPreview(file);
+    }
+
+    function downloadEntitiesCsv() {
+      const file = state.selectedResult;
+      if (!file || !file.entityTableView) {
+        alert("엔티티 표를 먼저 표시하세요.");
+        return;
+      }
+      const { columns, rows } = file.entityTableView;
+      if (!columns || columns.length === 0) {
+        alert("CSV로 내보낼 데이터가 없습니다.");
+        return;
+      }
+      const escapeCsv = (value) => {
+        const text = value === undefined || value === null ? "" : String(value);
+        if (/[\",\\n]/.test(text)) {
+          return `"${text.replace(/\"/g, "\"\"")}"`;
+        }
+        return text;
+      };
+      const lines = [];
+      lines.push(columns.map(escapeCsv).join(","));
+      rows.forEach((row) => {
+        lines.push(row.map(escapeCsv).join(","));
+      });
+      const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const base = file.name ? file.name.replace(/\.[^.]+$/, "") : "entities";
+      a.download = `${base}_entities.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     }
 
     function loadScriptOnce(url) {
