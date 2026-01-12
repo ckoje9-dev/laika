@@ -427,16 +427,6 @@
       overflow: auto;
       max-height: 260px;
     }
-    .table-wrap.wide {
-      overflow-x: auto;
-    }
-    .table-wrap.wide table {
-      min-width: 1200px;
-    }
-    .table-wrap.wide th,
-    .table-wrap.wide td {
-      white-space: nowrap;
-    }
     .table-wrap.sticky-table {
       max-height: 360px;
     }
@@ -1329,19 +1319,152 @@
       const entitiesColumns = Array.isArray(file.entitiesTableColumns) ? file.entitiesTableColumns : [];
       const fallbackRows = data.entities || data.entity_table || [];
       const sourceRows = entitiesTable.length ? entitiesTable : fallbackRows.slice(0, 10);
+      const hiddenColumns = new Set(
+        [
+          "contextData",
+          "xScale",
+          "yScale",
+          "zScale",
+          "dimensionType",
+          "block",
+          "width",
+          "lineType",
+          "ownerHandle",
+          "coordinates",
+        ].map((v) => v.toLowerCase())
+      );
+      const coordColumns = new Set(
+        [
+          "vertices",
+          "startPoint",
+          "endPoint",
+          "center",
+          "position",
+          "linearOrAngularPoint1",
+          "linearOrAngularPoint2",
+        ].map((v) => v.toLowerCase())
+      );
+
       const columns = entitiesColumns.length
         ? entitiesColumns
         : sourceRows.length
         ? Object.keys(sourceRows[0])
         : [];
-      const colSpan = Math.max(columns.length, 1);
-      const headerCells = columns.map((c) => `<th>${c}</th>`).join("");
-      const entityRows = sourceRows.map((e) => {
-        const cells = columns.map((c) => {
-          const raw = e?.[c];
-          return `<td>${raw === undefined || raw === null || raw === "" ? "-" : raw}</td>`;
+      const allowedBaseColumns = ["handle", "type", "layer", "text", "name", "radius", "actualMeasurement"];
+      const baseColumns = columns
+        .filter((c) => !hiddenColumns.has(String(c).toLowerCase()))
+        .filter((c) => allowedBaseColumns.includes(String(c)));
+      const baseColumnsOrdered = ["handle", "type", "layer"].concat(
+        baseColumns.filter((c) => !["handle", "type", "layer"].includes(String(c)))
+      );
+      const coordColumnsHeader = ["coord_x", "coord_y", "coord_z"];
+      const visibleColumns = baseColumnsOrdered.concat(coordColumnsHeader);
+      const roundNumbers = (value) => {
+        if (typeof value === "number") {
+          return Math.round(value * 10000) / 10000;
+        }
+        if (Array.isArray(value)) {
+          return value.map(roundNumbers);
+        }
+        if (value && typeof value === "object") {
+          const out = {};
+          Object.keys(value).forEach((k) => {
+            out[k] = roundNumbers(value[k]);
+          });
+          return out;
+        }
+        return value;
+      };
+      const formatCoord = (value) => {
+        const num = typeof value === "number" ? value : 0;
+        return (Math.round(num * 10000) / 10000).toFixed(4);
+      };
+      const toNumber = (value) => {
+        if (typeof value === "number") return value;
+        if (typeof value === "string" && value.trim() !== "") {
+          const parsed = Number(value);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+        return null;
+      };
+      const columnMap = new Map(columns.map((c) => [String(c).toLowerCase(), c]));
+      const extractCoordRows = (row) => {
+        const out = [];
+        coordColumns.forEach((key) => {
+          const actualKey = columnMap.get(key) || key;
+          const raw = row?.[actualKey];
+          if (raw === undefined || raw === null || raw === "") return;
+          let value = raw;
+          if (typeof raw === "string") {
+            const trimmed = raw.trim();
+            if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+              try {
+                value = JSON.parse(trimmed);
+              } catch {
+                value = raw;
+              }
+            }
+          }
+          const pushPoint = (pt) => {
+            if (!pt) return;
+            const x = toNumber(pt.x);
+            const y = toNumber(pt.y);
+            const z = toNumber(pt.z);
+            if (x === null && y === null && z === null) return;
+            out.push({
+              coord_x: formatCoord(x ?? 0),
+              coord_y: formatCoord(y ?? 0),
+              coord_z: formatCoord(z ?? 0),
+            });
+          };
+          if (Array.isArray(value)) {
+            value.forEach((item) => {
+              if (item && typeof item === "object") {
+                pushPoint(item);
+              }
+            });
+            return;
+          }
+          if (value && typeof value === "object") {
+            pushPoint(value);
+          }
         });
-        return `<tr>${cells.join("")}</tr>`;
+        return out;
+      };
+      const formatCellValue = (value) => {
+        if (value === undefined || value === null || value === "") return "-";
+        return value;
+      };
+      const colSpan = Math.max(visibleColumns.length, 1);
+      const headerCells = visibleColumns.map((c) => `<th>${c}</th>`).join("");
+      const baseColumnSet = new Set(baseColumnsOrdered);
+      const entityRows = sourceRows.flatMap((e) => {
+        const coordRows = extractCoordRows(e);
+        const rowSpan = coordRows.length || 1;
+        const renderRow = (coord, includeBase) =>
+          visibleColumns.map((c) => {
+            const isCoord = c.startsWith("coord_");
+            if (isCoord) {
+              const raw = coord ? coord[c] : null;
+              return `<td>${formatCellValue(raw)}</td>`;
+            }
+            if (!includeBase) {
+              return null;
+            }
+            if (baseColumnSet.has(c) && rowSpan > 1) {
+              const raw = e?.[c];
+              return `<td rowspan="${rowSpan}">${formatCellValue(raw)}</td>`;
+            }
+            const raw = e?.[c];
+            return `<td>${formatCellValue(raw)}</td>`;
+          });
+        if (!coordRows.length) {
+          return [`<tr>${renderRow(null, true).filter(Boolean).join("")}</tr>`];
+        }
+        return coordRows.map((coord, idx) => {
+          const cells = renderRow(coord, idx === 0).filter(Boolean);
+          return `<tr>${cells.join("")}</tr>`;
+        });
       });
 
       view.innerHTML = `
@@ -1350,7 +1473,7 @@
         <div class="accordion">
           <div class="acc-header" data-acc="basic"><strong>DXF 기본 파싱 내용</strong></div>
             <div class="acc-body" id="acc-basic">
-            <div class="table-wrap wide sticky-table" style="margin-top:8px;">
+            <div class="table-wrap sticky-table" style="margin-top:8px;">
               <table>
                 <thead><tr>${headerCells}</tr></thead>
                 <tbody>
