@@ -4,48 +4,6 @@ import sys
 from pathlib import Path
 
 
-COORD_KEYS = [
-    "vertices",
-    "startPoint",
-    "endPoint",
-    "center",
-    "position",
-    "anchorPoint",
-    "middleOfText",
-    "linearOrAngularPoint1",
-    "linearOrAngularPoint2",
-]
-
-CSV_COLUMNS = [
-    "handle",
-    "type",
-    "layer",
-    "ownerHandle",
-    "coordinates",
-    "text",
-    "textHeight",
-    "name",
-    "lineType",
-    "radius",
-    "width",
-    "block",
-    "dimensionType",
-    "actualMeasurement",
-    "xScale",
-    "yScale",
-    "zScale",
-    "contextData",
-]
-
-
-def _collect_coordinates(entity: dict) -> str:
-    coords = []
-    for key in COORD_KEYS:
-        if key in entity:
-            coords.append({"key": key, "value": entity.get(key)})
-    return json.dumps(coords, separators=(",", ":"), ensure_ascii=False)
-
-
 def main() -> int:
     if len(sys.argv) < 2:
         print("Usage: python apps/worker/src/pipelines/parse/extract_entities_table.py <input.json> [output.csv]")
@@ -60,39 +18,34 @@ def main() -> int:
         data = json.load(fp)
 
     entities = data.get("entities") or []
+    keys = set()
     rows = []
     for ent in entities:
         if not isinstance(ent, dict):
             continue
-        row = {
-            "handle": ent.get("handle"),
-            "type": ent.get("type"),
-            "layer": ent.get("layer"),
-            "ownerHandle": ent.get("ownerHandle"),
-            "coordinates": _collect_coordinates(ent),
-            "text": ent.get("text"),
-            "textHeight": ent.get("textHeight"),
-            "name": ent.get("name"),
-            "lineType": ent.get("lineType"),
-            "radius": ent.get("radius"),
-            "width": ent.get("width"),
-            "block": ent.get("block"),
-            "dimensionType": ent.get("dimensionType"),
-            "actualMeasurement": ent.get("actualMeasurement"),
-            "xScale": ent.get("xScale"),
-            "yScale": ent.get("yScale"),
-            "zScale": ent.get("zScale"),
-            "contextData": ent.get("contextData"),
-        }
+        keys.update(ent.keys())
+
+    columns = ["handle"] + sorted(k for k in keys if k != "handle")
+
+    for ent in entities:
+        if not isinstance(ent, dict):
+            continue
+        row = {}
+        for key in columns:
+            value = ent.get(key)
+            if isinstance(value, (dict, list)):
+                row[key] = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+            else:
+                row[key] = value
         rows.append(row)
 
     if out_path:
         with out_path.open("w", newline="", encoding="utf-8") as fp:
-            writer = csv.DictWriter(fp, fieldnames=CSV_COLUMNS)
+            writer = csv.DictWriter(fp, fieldnames=columns)
             writer.writeheader()
             writer.writerows(rows)
     else:
-        writer = csv.DictWriter(sys.stdout, fieldnames=CSV_COLUMNS)
+        writer = csv.DictWriter(sys.stdout, fieldnames=columns)
         writer.writeheader()
         writer.writerows(rows)
 

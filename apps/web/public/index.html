@@ -427,6 +427,29 @@
       overflow: auto;
       max-height: 260px;
     }
+    .table-wrap.wide {
+      overflow-x: auto;
+    }
+    .table-wrap.wide table {
+      min-width: 1200px;
+    }
+    .table-wrap.wide th,
+    .table-wrap.wide td {
+      white-space: nowrap;
+    }
+    .table-wrap.sticky-table {
+      max-height: 360px;
+    }
+    .table-wrap.sticky-table thead th {
+      position: sticky;
+      top: 0;
+      background: var(--surface-2);
+      z-index: 3;
+    }
+    .table-wrap.sticky-table th,
+    .table-wrap.sticky-table td {
+      background: var(--surface-2);
+    }
     .preview-frame {
       width: 100%;
       height: 340px;
@@ -1195,6 +1218,7 @@
       if (!file?.fileId) return;
       const data = await api(`/uploads/${file.fileId}/entities-table`);
       file.entitiesTable = Array.isArray(data.rows) ? data.rows : [];
+      file.entitiesTableColumns = Array.isArray(data.columns) ? data.columns : [];
     }
 
       async function loadParsed(file) {
@@ -1302,15 +1326,22 @@
         const layers = data.layers || [];
         const blocks = data.blocks || [];
       const entitiesTable = Array.isArray(file.entitiesTable) ? file.entitiesTable : [];
-      const entitiesFallback = data.entities || data.entity_table || [];
-      const sourceRows = entitiesTable.length ? entitiesTable : entitiesFallback.slice(0, 10);
-      const entityRows = sourceRows.map((e, i) => {
-        const handle = e.handle || e.HANDLE || "-";
-        const dtype = e.type || e.TYPE || "-";
-        const layer = e.layer || e.LAYER || "-";
-        const text = e.text || e.TEXT || "-";
-        const coords = e.coordinates || e.coords || "-";
-        return `<tr><td>${handle}</td><td>${dtype}</td><td>${layer}</td><td>${text}</td><td>${coords}</td></tr>`;
+      const entitiesColumns = Array.isArray(file.entitiesTableColumns) ? file.entitiesTableColumns : [];
+      const fallbackRows = data.entities || data.entity_table || [];
+      const sourceRows = entitiesTable.length ? entitiesTable : fallbackRows.slice(0, 10);
+      const columns = entitiesColumns.length
+        ? entitiesColumns
+        : sourceRows.length
+        ? Object.keys(sourceRows[0])
+        : [];
+      const colSpan = Math.max(columns.length, 1);
+      const headerCells = columns.map((c) => `<th>${c}</th>`).join("");
+      const entityRows = sourceRows.map((e) => {
+        const cells = columns.map((c) => {
+          const raw = e?.[c];
+          return `<td>${raw === undefined || raw === null || raw === "" ? "-" : raw}</td>`;
+        });
+        return `<tr>${cells.join("")}</tr>`;
       });
 
       view.innerHTML = `
@@ -1318,44 +1349,12 @@
         <div id="dxfPreview" class="preview-frame" style="position:relative; overflow:hidden; background:#f7faff;"></div>
         <div class="accordion">
           <div class="acc-header" data-acc="basic"><strong>DXF 기본 파싱 내용</strong></div>
-          <div class="acc-body" id="acc-basic">
-            <div style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px;">
-              <div class="table-wrap">
-                <table>
-                  <thead><tr><th>레이어명</th><th>색상</th></tr></thead>
-                  <tbody>
-                    ${
-                      layers.length
-                        ? layers
-                            .slice(0, 15)
-                            .map((l) => `<tr><td>${l.name || l.layer || "-"}</td><td>${l.color || "-"}</td></tr>`)
-                            .join("")
-                        : "<tr><td colspan='2'>레이어 정보 없음</td></tr>"
-                    }
-                  </tbody>
-                </table>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead><tr><th>블록명</th><th>개수</th></tr></thead>
-                  <tbody>
-                    ${
-                      blocks.length
-                        ? blocks
-                            .slice(0, 15)
-                            .map((b) => `<tr><td>${b.name || b.block_name || "-"}</td><td>${b.count || b.total || "-"}</td></tr>`)
-                            .join("")
-                        : "<tr><td colspan='2'>블록 정보 없음</td></tr>"
-                    }
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div class="table-wrap" style="margin-top:8px;">
+            <div class="acc-body" id="acc-basic">
+            <div class="table-wrap wide sticky-table" style="margin-top:8px;">
               <table>
-                <thead><tr><th>HANDLE</th><th>TYPE</th><th>LAYER</th><th>TEXT</th><th>COORDINATES</th></tr></thead>
+                <thead><tr>${headerCells}</tr></thead>
                 <tbody>
-                  ${entityRows.length ? entityRows.join("") : "<tr><td colspan='5'>엔티티 정보 없음</td></tr>"}
+                  ${entityRows.length ? entityRows.join("") : `<tr><td colspan='${colSpan}'>엔티티 정보 없음</td></tr>`}
                 </tbody>
               </table>
             </div>

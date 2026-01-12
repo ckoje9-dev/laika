@@ -123,15 +123,17 @@ def _load_json(path: Path | None) -> Any:
         return None
 
 
-def _load_entities_csv(path: Path | None) -> list[dict]:
+def _load_entities_csv(path: Path | None) -> tuple[list[dict], list[str]]:
     if path is None or not path.exists():
-        return []
+        return [], []
     try:
         with path.open("r", encoding="utf-8") as fp:
             reader = csv.DictReader(fp)
-            return [row for row in reader]
+            rows = [row for row in reader]
+            columns = reader.fieldnames or []
+            return rows, columns
     except OSError:
-        return []
+        return [], []
 
 
 def _ensure_entities_csv(file_row: db_models.File) -> Path | None:
@@ -370,10 +372,11 @@ async def get_entities_table(file_id: str, session: AsyncSession = Depends(get_s
     csv_path = _ensure_entities_csv(file_row)
     if not csv_path or not csv_path.exists():
         raise HTTPException(status_code=404, detail="entities table not ready")
-    rows = _load_entities_csv(csv_path)
+    rows, columns = _load_entities_csv(csv_path)
     return {
         "file_id": file_id,
         "rows": rows,
+        "columns": columns,
         "csv_path": str(csv_path),
     }
 
