@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LAIKA</title>
   <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <script src="/vendor/FontLoader.js"></script>
+  <script src="/vendor/TextGeometry.js"></script>
   <script src="/vendor/OrbitControls.js"></script>
   <script src="/vendor/three-dxf.js"></script>
   <script src="/vendor/dxf-parser.js"></script>
@@ -1620,12 +1622,23 @@
       if (!loader) return null;
       if (!state.fontLoading) {
         state.fontLoading = new Promise((resolve, reject) => {
-          loader.load(
+          const candidates = [
+            "/vendor/NotoSansKR-Regular.typeface.json",
             "/vendor/helvetiker_regular.typeface.json",
-            (font) => resolve(font),
-            undefined,
-            (err) => reject(err)
-          );
+          ];
+          const tryLoad = (idx) => {
+            if (idx >= candidates.length) {
+              reject(new Error("font load failed"));
+              return;
+            }
+            loader.load(
+              candidates[idx],
+              (font) => resolve(font),
+              undefined,
+              () => tryLoad(idx + 1)
+            );
+          };
+          tryLoad(0);
         });
       }
       try {
