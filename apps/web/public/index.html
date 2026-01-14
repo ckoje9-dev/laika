@@ -717,6 +717,20 @@
           </div>
         </div>
       </div>
+        <div id="resultSection" class="layout" style="margin-top:16px; display:none;">
+          <div class="card" style="grid-column: span 2;">
+            <h3>파싱 결과</h3>
+            <div class="tab-layout" style="margin-top:8px;">
+              <div class="tab-rail" id="resultList"></div>
+              <div class="card" style="padding:12px; background: var(--surface-2);">
+                <div id="resultView" class="muted">파일을 선택하세요.</div>
+              </div>
+            </div>
+            <div class="actions-row" style="margin-top:12px; justify-content:center;">
+              <button class="btn primary" id="btnShowDetail">설정하기</button>
+            </div>
+          </div>
+        </div>
       <div id="detailSection" class="layout" style="margin-top:16px; display:none;">
         <div class="card" style="grid-column: span 2;">
           <h3>세부 설정</h3>
@@ -754,17 +768,6 @@
           </div>
           <div class="actions-center">
             <button class="btn primary" id="btnAnalyze">분석하기 <span class="throbber" aria-hidden="true"></span></button>
-          </div>
-        </div>
-      </div>
-      <div id="resultSection" class="layout" style="margin-top:16px; display:none;">
-        <div class="card" style="grid-column: span 2;">
-          <h3>분석 결과</h3>
-          <div class="tab-layout" style="margin-top:8px;">
-            <div class="tab-rail" id="resultList"></div>
-            <div class="card" style="padding:12px; background: var(--surface-2);">
-              <div id="resultView" class="muted">파일을 선택하세요.</div>
-            </div>
           </div>
         </div>
       </div>
@@ -1192,7 +1195,7 @@
                     if (state.templateFile) {
                       await loadParsed(state.templateFile).catch(() => {});
                     }
-                    $("detailSection").style.display = "grid";
+                    $("resultSection").style.display = "grid";
                   }
                 }
                 return resolve(true);
@@ -1376,11 +1379,11 @@
       if (!view) return;
       const file = state.selectedResult;
       if (!file) {
-        view.innerHTML = '<div class="muted">분석 결과를 보려면 파일을 선택하세요.</div>';
+        view.innerHTML = '<div class="muted">파싱 결과를 보려면 파일을 선택하세요.</div>';
         return;
       }
       if (!file.parsedData) {
-        view.innerHTML = '<div class="muted">분석 결과를 불러오는 중입니다...</div>';
+        view.innerHTML = '<div class="muted">파싱 결과를 불러오는 중입니다...</div>';
         return;
       }
       const data = file.parsedData;
@@ -1907,6 +1910,16 @@
         const file = state.templateFile || state.selectedResult || state.analyzeFiles[0];
         if (!file?.fileId) return alert("파싱 결과를 다운로드할 파일을 선택하세요.");
         window.open(`${API_BASE}/uploads/${file.fileId}/parse1-download`, "_blank");
+      };
+      $("btnShowDetail").onclick = () => {
+        if (!state.templateFile && state.analyzeFiles.length > 0) {
+          state.templateFile = state.analyzeFiles[0];
+        }
+        if (!state.templateFile) {
+          alert("템플릿 DXF를 먼저 선택하세요.");
+          return;
+        }
+        $("detailSection").style.display = "grid";
       };
       $("btnAnalyze").onclick = async () => {
         if (!state.loggedIn) return alert("로그인 후 이용 가능합니다.");
