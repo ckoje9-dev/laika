@@ -129,6 +129,17 @@
       border: none;
       box-shadow: 0 12px 30px rgba(79,143,255,0.25);
     }
+    .btn .throbber {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.5);
+      border-top-color: #fff;
+      display: none;
+      animation: spin 0.8s linear infinite;
+    }
+    .btn.is-loading .throbber { display: inline-block; }
+    .btn.is-loading { pointer-events: none; }
     .btn.ghost { background: transparent; }
     .btn:disabled {
       opacity: 0.55;
@@ -476,6 +487,23 @@
       border-radius: 12px;
       background: #f7faff;
     }
+    .viewer-loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(247, 250, 255, 0.6);
+      backdrop-filter: blur(2px);
+    }
+    .viewer-loading .throbber {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 3px solid rgba(47, 142, 251, 0.3);
+      border-top-color: var(--accent);
+      animation: spin 0.8s linear infinite;
+    }
     .tag {
       display: inline-flex;
       align-items: center;
@@ -515,6 +543,9 @@
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(6px); }
       to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
     @media (max-width: 960px) {
       .layout { grid-template-columns: 1fr; }
@@ -657,7 +688,7 @@
           </div>
           <div class="file-list" id="convertList" style="display:none;"></div>
           <div class="actions-center">
-            <button class="btn primary" id="btnConvertStart" disabled>변환하기</button>
+            <button class="btn primary" id="btnConvertStart" disabled>변환하기 <span class="throbber" aria-hidden="true"></span></button>
             <button class="btn" id="btnConvertDownload" style="display:none;">일괄 다운로드</button>
           </div>
         </div>
@@ -682,7 +713,7 @@
           </div>
           <div class="file-list" id="analyzeList" style="display:none;"></div>
           <div class="actions-center">
-            <button class="btn primary" id="btnParse">파싱하기</button>
+            <button class="btn primary" id="btnParse">파싱하기 <span class="throbber" aria-hidden="true"></span></button>
           </div>
         </div>
       </div>
@@ -722,7 +753,7 @@
             </div>
           </div>
           <div class="actions-center">
-            <button class="btn primary" id="btnAnalyze">분석하기</button>
+            <button class="btn primary" id="btnAnalyze">분석하기 <span class="throbber" aria-hidden="true"></span></button>
           </div>
         </div>
       </div>
@@ -1144,19 +1175,19 @@
               return resolve(false);
             }
             const isDone = st === "done" || st === "completed" || st === "success" || res.path_dxf || res.path_original;
-            if (isDone && (mode !== "convert" || res.path_dxf)) {
-              file.status = "done";
-              file.statusLabel = statusCopy.done;
-              file.progress = 100;
-              file.log = res.message || "완료되었습니다.";
-              file.pathDxf = res.path_dxf || res.upload_path || res.storage_path || file.pathDxf;
-              renderFileList(file.kind);
-              if (mode === "analyze") {
-                await loadParsed(file).catch(() => {});
-                $("detailSection").style.display = "grid";
+              if (isDone && (mode !== "convert" || res.path_dxf)) {
+                file.status = "done";
+                file.statusLabel = statusCopy.done;
+                file.progress = 100;
+                file.log = res.message || "완료되었습니다.";
+                file.pathDxf = res.path_dxf || res.upload_path || res.storage_path || file.pathDxf;
+                renderFileList(file.kind);
+                if (mode === "analyze") {
+                  await loadParsed(file).catch(() => {});
+                  $("detailSection").style.display = "grid";
+                }
+                return resolve(true);
               }
-              return resolve(true);
-            }
             file.status = mode === "convert" ? "processing" : "parsing";
             file.statusLabel = mode === "convert" ? statusCopy.converting : statusCopy.parsing;
             file.progress = mode === "convert" ? 70 : 80;
@@ -1176,29 +1207,32 @@
       });
     }
 
-    async function startConvert() {
-      if (state.convertFiles.length === 0) return alert("업로드할 DWG 파일을 선택하세요.");
-      const btn = $("btnConvertStart");
-      if (btn) btn.disabled = true;
-      const versionId = await createVersion("conv").catch((e) => {
-        alert("버전 생성에 실패했습니다. " + e.message);
-        if (btn) btn.disabled = false;
-      });
-      if (!versionId) return;
-      for (const file of state.convertFiles) {
-        try {
-          await uploadOne(file, versionId);
-          await api(`/uploads/${file.fileId}/convert`, { method: "POST" });
-          await pollStatus(file, "convert");
-        } catch (err) {
-          file.status = "failed";
-          file.statusLabel = statusCopy.failed;
-          file.log = err.message || "변환 실패";
-          renderFileList("convert");
+      async function startConvert() {
+        if (state.convertFiles.length === 0) return alert("업로드할 DWG 파일을 선택하세요.");
+        const btn = $("btnConvertStart");
+        if (btn) btn.disabled = true;
+        if (btn) btn.classList.add("is-loading");
+        const versionId = await createVersion("conv").catch((e) => {
+          alert("버전 생성에 실패했습니다. " + e.message);
+          if (btn) btn.disabled = false;
+          if (btn) btn.classList.remove("is-loading");
+        });
+        if (!versionId) return;
+        for (const file of state.convertFiles) {
+          try {
+            await uploadOne(file, versionId);
+            await api(`/uploads/${file.fileId}/convert`, { method: "POST" });
+            await pollStatus(file, "convert");
+          } catch (err) {
+            file.status = "failed";
+            file.statusLabel = statusCopy.failed;
+            file.log = err.message || "변환 실패";
+            renderFileList("convert");
+          }
         }
+        if (btn) btn.disabled = false;
+        if (btn) btn.classList.remove("is-loading");
       }
-      if (btn) btn.disabled = false;
-    }
 
     function applyTemplateSelections() {
       const layers = state.layerOptions || [];
@@ -1271,9 +1305,11 @@
       if (state.analyzeFiles.length === 0) return alert("분석할 DXF 파일을 먼저 업로드하세요.");
       const btn = $("btnParse");
       if (btn) btn.disabled = true;
+      if (btn) btn.classList.add("is-loading");
       const versionId = await createVersion("parse").catch((e) => {
         alert("버전 생성에 실패했습니다. " + e.message);
         if (btn) btn.disabled = false;
+        if (btn) btn.classList.remove("is-loading");
       });
         if (!versionId) return;
         for (const file of state.analyzeFiles) {
@@ -1288,8 +1324,8 @@
           renderFileList("analyze");
         }
       }
-      if ($("detailSection")) $("detailSection").style.display = "grid";
       if (btn) btn.disabled = false;
+      if (btn) btn.classList.remove("is-loading");
     }
 
     function updateResultList(forceSelect = false) {
@@ -1451,8 +1487,15 @@
         });
         return out;
       };
-      const formatCellValue = (value) => {
+      const formatCellValue = (value, key) => {
         if (value === undefined || value === null || value === "") return "-";
+        const keyLower = String(key || "").toLowerCase();
+        if (keyLower === "radius" || keyLower === "actualmeasurement") {
+          const num = typeof value === "number" ? value : Number(value);
+          if (Number.isFinite(num)) {
+            return (Math.round(num * 10000) / 10000).toFixed(4);
+          }
+        }
         return value;
       };
       const colSpan = Math.max(visibleColumns.length, 1);
@@ -1481,28 +1524,28 @@
             const isCoord = c.startsWith("coord_");
             if (isCoord) {
               const raw = coord ? coord[c] : null;
-                return `<td class="${columnClass(c)}">${formatCellValue(raw)}</td>`;
+                return `<td class="${columnClass(c)}">${formatCellValue(raw, c)}</td>`;
             }
             if (!includeBase) {
               return null;
             }
             if (baseColumnSet.has(c) && rowSpan > 1) {
               const raw = e?.[c];
-              return `<td class="${columnClass(c)}" rowspan="${rowSpan}">${formatCellValue(raw)}</td>`;
+              return `<td class="${columnClass(c)}" rowspan="${rowSpan}">${formatCellValue(raw, c)}</td>`;
             }
             const raw = e?.[c];
-            return `<td class="${columnClass(c)}">${formatCellValue(raw)}</td>`;
+            return `<td class="${columnClass(c)}">${formatCellValue(raw, c)}</td>`;
           });
         const renderCsvRow = (coord, includeBase) =>
           visibleColumns.map((c) => {
             const isCoord = c.startsWith("coord_");
             if (isCoord) {
-              return formatCellValue(coord ? coord[c] : null);
+              return formatCellValue(coord ? coord[c] : null, c);
             }
             if (!includeBase) {
               return "";
             }
-            return formatCellValue(e?.[c]);
+            return formatCellValue(e?.[c], c);
           });
         if (!coordRows.length) {
           csvRows.push(renderCsvRow(null, true));
@@ -1586,7 +1629,8 @@
       rows.forEach((row) => {
         lines.push(row.map(escapeCsv).join(","));
       });
-      const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+      const csvContent = "\ufeff" + lines.join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -1730,6 +1774,10 @@
       canvas.style.width = "100%";
       canvas.style.height = "100%";
       container.appendChild(canvas);
+      const loading = document.createElement("div");
+      loading.className = "viewer-loading";
+      loading.innerHTML = '<span class="throbber"></span>';
+      container.appendChild(loading);
       const threeDxf = await ensureThreeDxf();
       const Parser = await ensureDxfParser();
       const font = await ensureFont();
@@ -1772,6 +1820,7 @@
         const viewer = new threeDxf.Viewer(parsed, canvas, width, height, font || undefined);
         if (viewer.render) viewer.render();
         window.addEventListener("resize", () => viewer.resize && viewer.resize(container.clientWidth, container.clientHeight));
+        loading.remove();
       } catch (err) {
         container.innerHTML =
           '<div class="muted" style="padding:12px;">뷰어 렌더링 실패: ' +
@@ -1855,6 +1904,8 @@
         if (state.analyzeFiles.length === 0) return alert("분석할 DXF 파일을 먼저 업로드하세요.");
         const doneFiles = state.analyzeFiles.filter((f) => f.status === "done");
         if (doneFiles.length === 0) return alert("파싱 완료된 DXF가 없습니다. 먼저 파싱을 완료하세요.");
+        const btn = $("btnAnalyze");
+        if (btn) btn.classList.add("is-loading");
         if (!state.selectedResult || !doneFiles.includes(state.selectedResult)) {
           state.selectedResult = doneFiles[0];
         }
@@ -1867,6 +1918,7 @@
         $("resultSection").style.display = "grid";
         updateResultList(true);
         renderResultView();
+        if (btn) btn.classList.remove("is-loading");
       };
       document.querySelectorAll("[data-detail-tab]").forEach((btn) =>
         btn.addEventListener("click", () => setDetailTab(btn.dataset.detailTab))
