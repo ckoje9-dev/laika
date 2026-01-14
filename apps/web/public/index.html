@@ -1184,7 +1184,16 @@
                 renderFileList(file.kind);
                 if (mode === "analyze") {
                   await loadParsed(file).catch(() => {});
-                  $("detailSection").style.display = "grid";
+                  const allDone = (state.analyzeFiles || []).length > 0 && state.analyzeFiles.every((f) => f.status === "done");
+                  if (allDone) {
+                    if (!state.templateFile && state.analyzeFiles.length > 0) {
+                      state.templateFile = state.analyzeFiles[0];
+                    }
+                    if (state.templateFile) {
+                      await loadParsed(state.templateFile).catch(() => {});
+                    }
+                    $("detailSection").style.display = "grid";
+                  }
                 }
                 return resolve(true);
               }
