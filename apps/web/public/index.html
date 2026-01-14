@@ -1300,6 +1300,16 @@
       const data = await api(`/uploads/${file.fileId}/entities-table`);
       file.entitiesTable = Array.isArray(data.rows) ? data.rows : [];
       file.entitiesTableColumns = Array.isArray(data.columns) ? data.columns : [];
+      if (Array.isArray(file.entitiesTable)) {
+        const columns = Array.isArray(file.entitiesTableColumns) ? file.entitiesTableColumns : [];
+        const handleKey = columns.includes("handle") ? "handle" : "HANDLE";
+        const set = new Set();
+        file.entitiesTable.forEach((row) => {
+          const val = row?.[handleKey];
+          if (val) set.add(String(val));
+        });
+        file.entityHandleCount = set.size || file.entitiesTable.length;
+      }
     }
 
       async function loadParsed(file) {
@@ -1408,6 +1418,18 @@
       const counts = data.counts || data.metadata?.counts || {};
         const layers = data.layers || [];
         const blocks = data.blocks || [];
+      const totalEntities =
+        typeof file.entityHandleCount === "number"
+          ? file.entityHandleCount
+          : file.entityTableView && Array.isArray(file.entityTableView.rows)
+          ? file.entityTableView.rows.length
+          : typeof data.total === "number"
+          ? data.total
+          : Array.isArray(data.entities)
+          ? data.entities.length
+          : Array.isArray(data.entity_table)
+          ? data.entity_table.length
+          : 0;
       const entitiesTable = Array.isArray(file.entitiesTable) ? file.entitiesTable : [];
       const entitiesColumns = Array.isArray(file.entitiesTableColumns) ? file.entitiesTableColumns : [];
       const fallbackRows = data.entities || data.entity_table || [];
@@ -1643,7 +1665,7 @@
         <h3 style="margin:8px 0 6px;">파일: ${file.name} / 단위: ${data.unit || "mm"}</h3>
         <div id="dxfPreview" class="preview-frame" style="position:relative; overflow:hidden; background:#f7faff;"></div>
         <div style="margin-top:8px;">
-          <div style="font-weight:700; margin:6px 0;">엔티티 TABLE</div>
+          <div style="font-weight:700; margin:6px 0;">엔티티 TABLE (${totalEntities} entities)</div>
           <div class="table-wrap sticky-table" id="entityTableWrap">
             ${tableHtml}
           </div>
