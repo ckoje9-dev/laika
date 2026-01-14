@@ -458,6 +458,16 @@
     .table-wrap.sticky-table td {
       background: var(--surface-2);
     }
+    .table-wrap.sticky-table th { white-space: nowrap; }
+    .table-wrap.sticky-table th.sortable { cursor: pointer; }
+    .sort-arrow {
+      font-size: 10px;
+      opacity: 0.65;
+      margin-left: 4px;
+      display: inline-block;
+      line-height: 1;
+    }
+    .sort-arrow.muted { opacity: 0.35; }
     .table-wrap.sticky-table th.col-handle,
     .table-wrap.sticky-table td.col-handle { width: 90px; }
     .table-wrap.sticky-table th.col-type,
@@ -1195,7 +1205,15 @@
                     if (state.templateFile) {
                       await loadParsed(state.templateFile).catch(() => {});
                     }
+                    if (!state.selectedResult && state.analyzeFiles.length > 0) {
+                      state.selectedResult = state.analyzeFiles[0];
+                    }
+                    if (state.selectedResult && !state.selectedResult.entitiesTable) {
+                      await loadEntitiesTable(state.selectedResult).catch(() => {});
+                    }
                     $("resultSection").style.display = "grid";
+                    updateResultList(true);
+                    renderResultView();
                   }
                 }
                 return resolve(true);
@@ -1427,6 +1445,9 @@
         : [];
       const baseColumnsOrdered = ["handle", "type", "layer", "text", "name", "radius", "actualMeasurement"];
       const visibleColumns = ["handle", "type", "layer", "coord_x", "coord_y", "coord_z", "text", "name", "radius", "actualMeasurement"];
+      const sortState = file.entitySort || { key: "handle", dir: "asc" };
+      const sortable = new Set(["handle", "type", "layer"]);
+      file.entitySort = sortState;
       const roundNumbers = (value) => {
         if (typeof value === "number") {
           return Math.round(value * 10000) / 10000;
@@ -1524,11 +1545,29 @@
       };
       const headerLabel = (c) => (c === "actualMeasurement" ? "dim" : c);
       const headerCells = visibleColumns
-        .map((c) => `<th class="${columnClass(c)}">${headerLabel(c)}</th>`)
+        .map((c) => {
+          if (!sortable.has(c)) {
+            return `<th class="${columnClass(c)}">${headerLabel(c)}</th>`;
+          }
+          const isActive = sortState.key === c;
+          const arrow = isActive ? (sortState.dir === "asc" ? "▲" : "▼") : "▲";
+          const arrowClass = isActive ? "sort-arrow" : "sort-arrow muted";
+          return `<th class="${columnClass(c)} sortable" data-sort="${c}">${headerLabel(c)}<span class="${arrowClass}">${arrow}</span></th>`;
+        })
         .join("");
       const baseColumnSet = new Set(baseColumnsOrdered);
       const csvRows = [];
-      const entityRows = sourceRows.flatMap((e) => {
+      const sortKey = sortState.key;
+      const sortDir = sortState.dir === "desc" ? -1 : 1;
+      const sortedSourceRows = sortKey
+        ? [...sourceRows].sort((a, b) => {
+            const av = String(a?.[sortKey] ?? "");
+            const bv = String(b?.[sortKey] ?? "");
+            if (av === bv) return 0;
+            return av < bv ? -1 * sortDir : 1 * sortDir;
+          })
+        : sourceRows;
+      const entityRows = sortedSourceRows.flatMap((e) => {
         const coordRows = extractCoordRows(e);
         const rowSpan = coordRows.length || 1;
         const renderRow = (coord, includeBase) =>
@@ -1571,18 +1610,42 @@
       });
       file.entityTableView = { columns: visibleColumns, rows: csvRows };
 
+      const tableHtml = `
+                <table>
+                  <thead><tr>${headerCells}</tr></thead>
+                  <tbody>
+                    ${entityRows.length ? entityRows.join("") : `<tr><td colspan='${colSpan}'>엔티티 정보 없음</td></tr>`}
+                  </tbody>
+                </table>
+      `;
+
+      if (file._skipPreviewUpdate) {
+        const wrap = document.getElementById("entityTableWrap");
+        if (wrap) {
+          wrap.innerHTML = tableHtml;
+          file._skipPreviewUpdate = false;
+          document.querySelectorAll("th.sortable").forEach((th) => {
+            th.onclick = () => {
+              const key = th.dataset.sort;
+              const current = file.entitySort || { key: null, dir: "asc" };
+              const nextDir = current.key === key && current.dir === "asc" ? "desc" : "asc";
+              file.entitySort = { key, dir: nextDir };
+              file._skipPreviewUpdate = true;
+              renderResultView();
+            };
+          });
+          return;
+        }
+        file._skipPreviewUpdate = false;
+      }
+
       view.innerHTML = `
         <h3 style="margin:8px 0 6px;">파일: ${file.name} / 단위: ${data.unit || "mm"}</h3>
         <div id="dxfPreview" class="preview-frame" style="position:relative; overflow:hidden; background:#f7faff;"></div>
         <div style="margin-top:8px;">
           <div style="font-weight:700; margin:6px 0;">엔티티 TABLE</div>
-          <div class="table-wrap sticky-table">
-            <table>
-              <thead><tr>${headerCells}</tr></thead>
-              <tbody>
-                ${entityRows.length ? entityRows.join("") : `<tr><td colspan='${colSpan}'>엔티티 정보 없음</td></tr>`}
-              </tbody>
-            </table>
+          <div class="table-wrap sticky-table" id="entityTableWrap">
+            ${tableHtml}
           </div>
           <div class="actions-row" style="margin:8px 0 0; justify-content:flex-end;">
             <button class="btn" onclick="downloadEntitiesCsv()">CSV 다운로드</button>
@@ -1590,13 +1653,16 @@
         </div>
       `;
 
-      document.querySelectorAll(".acc-header").forEach((h) => {
-        h.onclick = () => {
-          const body = $("acc-" + h.dataset.acc);
-          const isOpen = body.classList.toggle("open");
-          h.classList.toggle("open", isOpen);
-        };
-      });
+        document.querySelectorAll("th.sortable").forEach((th) => {
+          th.onclick = () => {
+            const key = th.dataset.sort;
+            const current = file.entitySort || { key: null, dir: "asc" };
+            const nextDir = current.key === key && current.dir === "asc" ? "desc" : "asc";
+            file.entitySort = { key, dir: nextDir };
+            file._skipPreviewUpdate = true;
+            renderResultView();
+          };
+        });
 
       renderDxfPreview(file);
     }
