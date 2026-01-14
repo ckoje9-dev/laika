@@ -1574,35 +1574,18 @@
       view.innerHTML = `
         <h3 style="margin:8px 0 6px;">파일: ${file.name} / 단위: ${data.unit || "mm"}</h3>
         <div id="dxfPreview" class="preview-frame" style="position:relative; overflow:hidden; background:#f7faff;"></div>
-        <div class="accordion">
-          <div class="acc-header" data-acc="basic"><strong>DXF 기본 파싱 내용</strong></div>
-            <div class="acc-body" id="acc-basic">
-            <div class="table-wrap sticky-table" style="margin-top:8px;">
-              <table>
-                <thead><tr>${headerCells}</tr></thead>
-                <tbody>
-                  ${entityRows.length ? entityRows.join("") : `<tr><td colspan='${colSpan}'>엔티티 정보 없음</td></tr>`}
-                </tbody>
-              </table>
-            </div>
-            <div class="actions-row" style="margin:8px 0 0; justify-content:flex-end;">
-              <button class="btn" onclick="downloadEntitiesCsv()">CSV 다운로드</button>
-            </div>
+        <div style="margin-top:8px;">
+          <div style="font-weight:700; margin:6px 0;">엔티티 TABLE</div>
+          <div class="table-wrap sticky-table">
+            <table>
+              <thead><tr>${headerCells}</tr></thead>
+              <tbody>
+                ${entityRows.length ? entityRows.join("") : `<tr><td colspan='${colSpan}'>엔티티 정보 없음</td></tr>`}
+              </tbody>
+            </table>
           </div>
-        </div>
-        <div class="accordion">
-          <div class="acc-header" data-acc="ai"><strong>AI 분석 내용</strong></div>
-          <div class="acc-body" id="acc-ai">
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>항목</th><th>값</th></tr></thead>
-                <tbody><tr><td>도곽 블록</td><td>${(state.selectedOptions["basic-border-block"] || []).join(", ") || "미지정"}</td></tr></tbody>
-              </table>
-            </div>
-            <div class="actions-row" style="margin:8px 0 0; justify-content:flex-end;">
-              <button class="btn" onclick="alert('AI 결과 JSON 다운로드 API가 준비되면 연결합니다.')">JSON 다운로드</button>
-              <button class="btn" onclick="alert('AI 결과 CSV 다운로드 API가 준비되면 연결합니다.')">CSV 다운로드</button>
-            </div>
+          <div class="actions-row" style="margin:8px 0 0; justify-content:flex-end;">
+            <button class="btn" onclick="downloadEntitiesCsv()">CSV 다운로드</button>
           </div>
         </div>
       `;
