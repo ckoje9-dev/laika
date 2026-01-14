@@ -748,7 +748,6 @@
           <div class="row-select" style="grid-template-columns: 140px 1fr auto; margin-top:10px;">
             <label>템플릿 DXF</label>
             <div class="smart-select compact-select" id="template-file-select" data-select-type="template"></div>
-            <button class="btn" id="btnParseDownload">json 다운로드</button>
           </div>
           <div class="config-columns">
             <div class="config-card">
@@ -779,6 +778,12 @@
           <div class="actions-center">
             <button class="btn primary" id="btnAnalyze">분석하기 <span class="throbber" aria-hidden="true"></span></button>
           </div>
+        </div>
+      </div>
+      <div id="aiResultSection" class="layout" style="margin-top:16px; display:none;">
+        <div class="card" style="grid-column: span 2;">
+          <h3>AI 분석 결과</h3>
+          <div class="muted">결과가 준비되면 여기에 표시됩니다.</div>
         </div>
       </div>
     </section>
@@ -1430,6 +1435,7 @@
           : Array.isArray(data.entity_table)
           ? data.entity_table.length
           : 0;
+      const totalEntitiesLabel = Number(totalEntities || 0).toLocaleString("en-US");
       const entitiesTable = Array.isArray(file.entitiesTable) ? file.entitiesTable : [];
       const entitiesColumns = Array.isArray(file.entitiesTableColumns) ? file.entitiesTableColumns : [];
       const fallbackRows = data.entities || data.entity_table || [];
@@ -1665,15 +1671,16 @@
         <h3 style="margin:8px 0 6px;">파일: ${file.name} / 단위: ${data.unit || "mm"}</h3>
         <div id="dxfPreview" class="preview-frame" style="position:relative; overflow:hidden; background:#f7faff;"></div>
         <div style="margin-top:8px;">
-          <div style="font-weight:700; margin:6px 0;">엔티티 TABLE (${totalEntities} entities)</div>
+          <div style="font-weight:700; margin:6px 0;">엔티티 TABLE (${totalEntitiesLabel} entities)</div>
           <div class="table-wrap sticky-table" id="entityTableWrap">
             ${tableHtml}
           </div>
-          <div class="actions-row" style="margin:8px 0 0; justify-content:flex-end;">
-            <button class="btn" onclick="downloadEntitiesCsv()">CSV 다운로드</button>
+            <div class="actions-row" style="margin:8px 0 0; justify-content:flex-end;">
+              <button class="btn" onclick="downloadParseJson()">JSON 다운로드</button>
+              <button class="btn" onclick="downloadEntitiesCsv()">CSV 다운로드</button>
+            </div>
           </div>
-        </div>
-      `;
+        `;
 
         document.querySelectorAll("th.sortable").forEach((th) => {
           th.onclick = () => {
@@ -1723,6 +1730,15 @@
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+    }
+
+    function downloadParseJson() {
+      const file = state.templateFile || state.selectedResult || state.analyzeFiles[0];
+      if (!file?.fileId) {
+        alert("파싱 결과를 다운로드할 파일을 선택하세요.");
+        return;
+      }
+      window.open(`${API_BASE}/uploads/${file.fileId}/parse1-download`, "_blank");
     }
 
     function loadScriptOnce(url) {
@@ -1977,11 +1993,14 @@
         }
       };
       $("btnParse").onclick = startParse;
-      $("btnParseDownload").onclick = () => {
-        const file = state.templateFile || state.selectedResult || state.analyzeFiles[0];
-        if (!file?.fileId) return alert("파싱 결과를 다운로드할 파일을 선택하세요.");
-        window.open(`${API_BASE}/uploads/${file.fileId}/parse1-download`, "_blank");
-      };
+      const parseDownloadBtn = $("btnParseDownload");
+      if (parseDownloadBtn) {
+        parseDownloadBtn.onclick = () => {
+          const file = state.templateFile || state.selectedResult || state.analyzeFiles[0];
+          if (!file?.fileId) return alert("파싱 결과를 다운로드할 파일을 선택하세요.");
+          window.open(`${API_BASE}/uploads/${file.fileId}/parse1-download`, "_blank");
+        };
+      }
       $("btnShowDetail").onclick = () => {
         if (!state.templateFile && state.analyzeFiles.length > 0) {
           state.templateFile = state.analyzeFiles[0];
@@ -1990,7 +2009,14 @@
           alert("템플릿 DXF를 먼저 선택하세요.");
           return;
         }
-        $("detailSection").style.display = "grid";
+        const finalize = () => {
+          applyTemplateSelections();
+          initSmartSelects();
+          $("detailSection").style.display = "grid";
+        };
+        loadParsed(state.templateFile)
+          .catch(() => {})
+          .finally(finalize);
       };
       $("btnAnalyze").onclick = async () => {
         if (!state.loggedIn) return alert("로그인 후 이용 가능합니다.");
@@ -2011,6 +2037,7 @@
         $("resultSection").style.display = "grid";
         updateResultList(true);
         renderResultView();
+        if ($("aiResultSection")) $("aiResultSection").style.display = "grid";
         if (btn) btn.classList.remove("is-loading");
       };
       document.querySelectorAll("[data-detail-tab]").forEach((btn) =>
