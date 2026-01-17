@@ -928,28 +928,6 @@
       setTab("login");
     }
 
-    async function ensureProject() {
-      if (state.projectId) return state.projectId;
-      const list = await api("/projects/").catch(() => []);
-      if (Array.isArray(list) && list.length > 0) {
-        state.projectId = list[0].id || list[0].project_id || list[0].projectId;
-        return state.projectId;
-      }
-      const created = await api("/projects/", { method: "POST", body: { name: "LAIKA 웹 프로젝트" } });
-      state.projectId = created.id || created.project_id || created.projectId;
-      return state.projectId;
-    }
-
-    async function createVersion(prefix) {
-      const projectId = await ensureProject();
-      const versions = await api(`/projects/${projectId}/versions`).catch(() => []);
-      const next = (versions?.length || 0) + 1;
-      const created = await api(`/projects/${projectId}/versions`, {
-        method: "POST",
-        body: { label: `${prefix}-${next}` },
-      });
-      return created.id || created.version_id || created.versionId;
-    }
 
     function renderFileList(kind) {
       const listEl = kind === "convert" ? $("convertList") : $("analyzeList");
@@ -988,7 +966,7 @@
           const action = btn.dataset.action;
           btn.onclick = () => {
             if (action === "download") {
-              window.open(`${API_BASE}/uploads/${file.fileId}/download?kind=dxf`, "_blank");
+              window.open(`${API_BASE}/convert/${file.fileId}/download?kind=dxf`, "_blank");
               return;
             }
             (kind === "convert" ? state.convertFiles : state.analyzeFiles).splice(idx, 1);
@@ -1158,7 +1136,7 @@
       });
     }
 
-    async function uploadOne(file, versionId) {
+    async function uploadOne(file, endpoint) {
       if (file.fileId) return file.fileId;
       file.status = "uploading";
       file.statusLabel = statusCopy.uploading;
@@ -1166,9 +1144,8 @@
       file.log = "서버로 업로드 중";
       renderFileList(file.kind);
       const fd = new FormData();
-      fd.append("version_id", versionId);
       fd.append("file", file.fileObj);
-      const resp = await api("/uploads/upload", { method: "POST", body: fd });
+      const resp = await api(endpoint, { method: "POST", body: fd });
       file.fileId = resp.file_id || resp.id || resp.fileId;
       file.status = "uploaded";
       file.statusLabel = statusCopy.uploaded;
@@ -1182,7 +1159,8 @@
       return new Promise((resolve) => {
         const loop = async () => {
           try {
-            const res = await api(`/uploads/${file.fileId}/status`);
+            const statusBase = mode === "convert" ? "/convert" : "/parsing";
+            const res = await api(`${statusBase}/${file.fileId}/status`);
             const st = (res.status || "").toLowerCase();
             if (st.includes("fail") || st.includes("error")) {
               file.status = "failed";
@@ -1247,16 +1225,10 @@
         const btn = $("btnConvertStart");
         if (btn) btn.disabled = true;
         if (btn) btn.classList.add("is-loading");
-        const versionId = await createVersion("conv").catch((e) => {
-          alert("버전 생성에 실패했습니다. " + e.message);
-          if (btn) btn.disabled = false;
-          if (btn) btn.classList.remove("is-loading");
-        });
-        if (!versionId) return;
         for (const file of state.convertFiles) {
           try {
-            await uploadOne(file, versionId);
-            await api(`/uploads/${file.fileId}/convert`, { method: "POST" });
+            await uploadOne(file, "/convert/upload");
+            await api(`/convert/${file.fileId}/convert`, { method: "POST" });
             await pollStatus(file, "convert");
           } catch (err) {
             file.status = "failed";
@@ -1302,7 +1274,7 @@
 
     async function loadEntitiesTable(file) {
       if (!file?.fileId) return;
-      const data = await api(`/uploads/${file.fileId}/entities-table`);
+      const data = await api(`/parsing/${file.fileId}/entities-table`);
       file.entitiesTable = Array.isArray(data.rows) ? data.rows : [];
       file.entitiesTableColumns = Array.isArray(data.columns) ? data.columns : [];
       if (Array.isArray(file.entitiesTable)) {
@@ -1319,7 +1291,7 @@
 
       async function loadParsed(file) {
         if (!file?.fileId) return;
-        const data = await api(`/uploads/${file.fileId}/parsed`);
+        const data = await api(`/parsing/${file.fileId}/parsed1`);
         file.parsedData = data;
       const layerNames = Array.isArray(data.layers)
         ? data.layers.map((l) => l.name || l.layer || l).filter(Boolean)
@@ -1351,16 +1323,10 @@
       const btn = $("btnParse");
       if (btn) btn.disabled = true;
       if (btn) btn.classList.add("is-loading");
-      const versionId = await createVersion("parse").catch((e) => {
-        alert("버전 생성에 실패했습니다. " + e.message);
-        if (btn) btn.disabled = false;
-        if (btn) btn.classList.remove("is-loading");
-      });
-        if (!versionId) return;
         for (const file of state.analyzeFiles) {
           try {
-            await uploadOne(file, versionId);
-          await api(`/uploads/${file.fileId}/parse`, { method: "POST" });
+            await uploadOne(file, "/parsing/upload");
+          await api(`/parsing/${file.fileId}/parse1`, { method: "POST" });
           await pollStatus(file, "analyze");
         } catch (err) {
           file.status = "failed";
@@ -1738,7 +1704,7 @@
         alert("파싱 결과를 다운로드할 파일을 선택하세요.");
         return;
       }
-      window.open(`${API_BASE}/uploads/${file.fileId}/parse1-download`, "_blank");
+      window.open(`${API_BASE}/parsing/${file.fileId}/parse1-download`, "_blank");
     }
 
     function loadScriptOnce(url) {
@@ -1868,7 +1834,7 @@
         container.innerHTML = '<div class="muted" style="padding:12px;">DXF 파일이 준비되면 미리보기를 표시합니다.</div>';
         return;
       }
-      const url = `${API_BASE}/uploads/${file.fileId}/download?kind=dxf`;
+      const url = `${API_BASE}/parsing/${file.fileId}/download?kind=dxf`;
       const canvas = document.createElement("div");
       canvas.style.width = "100%";
       canvas.style.height = "100%";
@@ -1970,7 +1936,7 @@
         const doneFiles = state.convertFiles.filter((f) => f.status === "done" && f.pathDxf);
         if (doneFiles.length === 0) return alert("완료된 DXF가 없습니다.");
         try {
-          const res = await fetch(`${API_BASE}/uploads/bulk-download`, {
+          const res = await fetch(`${API_BASE}/convert/bulk-download`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ file_ids: doneFiles.map((f) => f.fileId), kind: "dxf" }),
@@ -1998,7 +1964,7 @@
         parseDownloadBtn.onclick = () => {
           const file = state.templateFile || state.selectedResult || state.analyzeFiles[0];
           if (!file?.fileId) return alert("파싱 결과를 다운로드할 파일을 선택하세요.");
-          window.open(`${API_BASE}/uploads/${file.fileId}/parse1-download`, "_blank");
+          window.open(`${API_BASE}/parsing/${file.fileId}/parse1-download`, "_blank");
         };
       }
       $("btnShowDetail").onclick = () => {

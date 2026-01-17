@@ -7,13 +7,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-import tempfile
-import zipfile
 import tempfile
 import zipfile
 
@@ -21,15 +19,42 @@ from packages.db.src.session import get_session
 from packages.db.src import models as db_models
 from packages.queue import enqueue
 
-router = APIRouter(tags=["uploads"])
+convert_router = APIRouter(tags=["convert"])
+parsing_router = APIRouter(tags=["parsing"])
 
 STORAGE_ORIGINAL_PATH = Path(os.getenv("STORAGE_ORIGINAL_PATH", "storage/original"))
 STORAGE_DERIVED_PATH = Path(os.getenv("STORAGE_DERIVED_PATH", "storage/derived"))
+DEFAULT_PROJECT_NAME = os.getenv("DEFAULT_PROJECT_NAME", "default")
 
 
-class UploadInitRequest(BaseModel):
-    version_id: str
-    filename: str
+async def _ensure_default_project(session: AsyncSession) -> db_models.Project:
+    result = await session.execute(select(db_models.Project).where(db_models.Project.name == DEFAULT_PROJECT_NAME))
+    project = result.scalar_one_or_none()
+    if project:
+        return project
+    project = db_models.Project(name=DEFAULT_PROJECT_NAME)
+    session.add(project)
+    await session.commit()
+    await session.refresh(project)
+    return project
+
+
+async def _ensure_default_version(session: AsyncSession, label: str) -> db_models.Version:
+    project = await _ensure_default_project(session)
+    result = await session.execute(
+        select(db_models.Version).where(
+            db_models.Version.project_id == project.id,
+            db_models.Version.label == label,
+        )
+    )
+    version = result.scalar_one_or_none()
+    if version:
+        return version
+    version = db_models.Version(project_id=project.id, label=label)
+    session.add(version)
+    await session.commit()
+    await session.refresh(version)
+    return version
 
 
 class UploadInitResponse(BaseModel):
@@ -46,11 +71,6 @@ class ParseResponse(BaseModel):
     message: str | None = None
     parsed: bool | None = None
     meta_path: str | None = None
-
-
-class BulkDownloadRequest(BaseModel):
-    file_ids: list[str]
-    kind: str = "dxf"
 
 
 class BulkDownloadRequest(BaseModel):
@@ -161,76 +181,17 @@ def _ensure_entities_csv(file_row: db_models.File) -> Path | None:
     return csv_path
 
 
-@router.post("/init", response_model=UploadInitResponse, status_code=201)
-async def init_upload(payload: UploadInitRequest, session: AsyncSession = Depends(get_session)):
-    # 버전 존재 확인
-    exists = await session.execute(select(db_models.Version.id).where(db_models.Version.id == payload.version_id))
-    if exists.scalar_one_or_none() is None:
-        raise HTTPException(status_code=404, detail="version not found")
-
-    ftype = _infer_type(payload.filename)
-    STORAGE_ORIGINAL_PATH.mkdir(parents=True, exist_ok=True)
-    storage_path = STORAGE_ORIGINAL_PATH / payload.filename
-
-    file_row = db_models.File(
-        version_id=payload.version_id,
-        type=ftype,
-        path_original=str(storage_path),
-        read_only=(ftype == "dwg"),
-    )
-    session.add(file_row)
-    await session.commit()
-    await session.refresh(file_row)
-
-    # 업로드는 로컬 경로로 가정 (서명 URL이 없다면 파일 시스템 직접 업로드)
-    upload_path = str(storage_path)
-    # 변환 잡 enqueue (동기 루틴이므로 실패해도 요청 자체는 201 반환)
-    enqueued = False
-    try:
-        enqueue("apps.worker.src.pipelines.convert.dwg_to_dxf.run", str(storage_path), str(file_row.id))
-        enqueued = True
-    except Exception as e:
-        # 큐 장애는 로깅만 하고 반환
-        import logging
-
-        logging.getLogger(__name__).warning("enqueue 실패: %s", e)
-
-    return UploadInitResponse(
-        file_id=str(file_row.id),
-        upload_path=upload_path,
-        storage_path=str(storage_path),
-        type=ftype,
-        enqueued=enqueued,
-    )
-
-
-@router.get("/{file_id}/status")
-async def get_upload_status(file_id: str, session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(db_models.ConversionLog).where(db_models.ConversionLog.file_id == file_id).order_by(db_models.ConversionLog.id.desc()))
-    log = result.scalars().first()
-    status = log.status if log else "pending"
-    file_row = await session.get(db_models.File, file_id)
-    return {
-        "file_id": file_id,
-        "status": status,
-        "message": log.message if log else None,
-        "path_dxf": file_row.path_dxf if file_row else None,
-        "path_original": file_row.path_original if file_row else None,
-    }
-
-
-@router.post("/upload", response_model=UploadInitResponse, status_code=201)
-async def upload_file(version_id: str = Form(...), file: UploadFile = File(...), session: AsyncSession = Depends(get_session)):
-    # 버전 존재 확인
-    exists = await session.execute(select(db_models.Version.id).where(db_models.Version.id == version_id))
-    if exists.scalar_one_or_none() is None:
-        raise HTTPException(status_code=404, detail="version not found")
-
+async def _save_upload(
+    session: AsyncSession, file: UploadFile, *, version_label: str, allowed_exts: tuple[str, ...]
+) -> UploadInitResponse:
     ftype = _infer_type(file.filename)
+    if ftype not in allowed_exts:
+        raise HTTPException(status_code=400, detail=f"{', '.join(allowed_exts)}만 업로드할 수 있습니다.")
+
+    version = await _ensure_default_version(session, version_label)
     STORAGE_ORIGINAL_PATH.mkdir(parents=True, exist_ok=True)
     storage_path = STORAGE_ORIGINAL_PATH / file.filename
 
-    # 파일 저장 (chunk 단위)
     with storage_path.open("wb") as f:
         while True:
             chunk = await file.read(1024 * 1024)
@@ -239,7 +200,7 @@ async def upload_file(version_id: str = Form(...), file: UploadFile = File(...),
             f.write(chunk)
 
     file_row = db_models.File(
-        version_id=version_id,
+        version_id=version.id,
         type=ftype,
         path_original=str(storage_path),
         read_only=(ftype == "dwg"),
@@ -257,8 +218,40 @@ async def upload_file(version_id: str = Form(...), file: UploadFile = File(...),
     )
 
 
-@router.get("/{file_id}/download")
-async def download_file(file_id: str, kind: str = "dxf", session: AsyncSession = Depends(get_session)):
+@convert_router.post("/upload", response_model=UploadInitResponse, status_code=201)
+async def upload_convert(file: UploadFile = File(...), session: AsyncSession = Depends(get_session)):
+    return await _save_upload(session, file, version_label="convert", allowed_exts=("dwg",))
+
+
+@parsing_router.post("/upload", response_model=UploadInitResponse, status_code=201)
+async def upload_parsing(file: UploadFile = File(...), session: AsyncSession = Depends(get_session)):
+    return await _save_upload(session, file, version_label="parse", allowed_exts=("dxf",))
+
+
+@convert_router.get("/{file_id}/status")
+async def get_convert_status(file_id: str, session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(db_models.ConversionLog).where(db_models.ConversionLog.file_id == file_id).order_by(db_models.ConversionLog.id.desc()))
+    log = result.scalars().first()
+    status = log.status if log else "pending"
+    file_row = await session.get(db_models.File, file_id)
+    return {
+        "file_id": file_id,
+        "status": status,
+        "message": log.message if log else None,
+        "path_dxf": file_row.path_dxf if file_row else None,
+        "path_original": file_row.path_original if file_row else None,
+    }
+
+
+@parsing_router.get("/{file_id}/status")
+async def get_parsing_status(file_id: str, session: AsyncSession = Depends(get_session)):
+    return await get_convert_status(file_id, session)
+
+
+
+
+@convert_router.get("/{file_id}/download")
+async def download_convert_file(file_id: str, kind: str = "dxf", session: AsyncSession = Depends(get_session)):
     file_row = await session.get(db_models.File, file_id)
     if not file_row:
         raise HTTPException(status_code=404, detail="file not found")
@@ -276,7 +269,12 @@ async def download_file(file_id: str, kind: str = "dxf", session: AsyncSession =
     raise HTTPException(status_code=400, detail="unsupported kind")
 
 
-@router.get("/{file_id}/parse1-download")
+@parsing_router.get("/{file_id}/download")
+async def download_parsing_file(file_id: str, kind: str = "dxf", session: AsyncSession = Depends(get_session)):
+    return await download_convert_file(file_id, kind, session)
+
+
+@parsing_router.get("/{file_id}/parse1-download")
 async def download_parse1(file_id: str, session: AsyncSession = Depends(get_session)):
     file_row = await session.get(db_models.File, file_id)
     if not file_row:
@@ -287,7 +285,7 @@ async def download_parse1(file_id: str, session: AsyncSession = Depends(get_sess
     return FileResponse(parse1_path, media_type="application/json", filename=parse1_path.name)
 
 
-@router.get("/{file_id}/parsed")
+@parsing_router.get("/{file_id}/parsed1")
 async def get_parsed_preview(
     file_id: str,
     limit: int | None = None,
@@ -364,7 +362,7 @@ async def get_parsed_preview(
     }
 
 
-@router.get("/{file_id}/entities-table")
+@parsing_router.get("/{file_id}/entities-table")
 async def get_entities_table(file_id: str, session: AsyncSession = Depends(get_session)):
     file_row = await session.get(db_models.File, file_id)
     if not file_row:
@@ -381,8 +379,8 @@ async def get_entities_table(file_id: str, session: AsyncSession = Depends(get_s
     }
 
 
-@router.post("/{file_id}/parse", response_model=ParseResponse)
-async def enqueue_parse(file_id: str, session: AsyncSession = Depends(get_session)):
+@parsing_router.post("/{file_id}/parse1", response_model=ParseResponse)
+async def enqueue_parse1(file_id: str, session: AsyncSession = Depends(get_session)):
     # file 존재 확인
     file_row = await session.get(db_models.File, file_id)
     if not file_row:
@@ -410,7 +408,7 @@ async def enqueue_parse(file_id: str, session: AsyncSession = Depends(get_sessio
     return ParseResponse(file_id=file_id, enqueued=enqueued, message=message)
 
 
-@router.post("/{file_id}/convert", response_model=ParseResponse)
+@convert_router.post("/{file_id}/convert", response_model=ParseResponse)
 async def enqueue_convert(file_id: str, session: AsyncSession = Depends(get_session)):
     file_row = await session.get(db_models.File, file_id)
     if not file_row:
@@ -432,7 +430,7 @@ async def enqueue_convert(file_id: str, session: AsyncSession = Depends(get_sess
     return ParseResponse(file_id=file_id, enqueued=enqueued, message=message)
 
 
-@router.post("/{file_id}/parse2", response_model=ParseResponse)
+@parsing_router.post("/{file_id}/parse2", response_model=ParseResponse)
 async def enqueue_parse2(file_id: str, session: AsyncSession = Depends(get_session)):
     file_row = await session.get(db_models.File, file_id)
     if not file_row:
@@ -452,10 +450,8 @@ async def enqueue_parse2(file_id: str, session: AsyncSession = Depends(get_sessi
     return ParseResponse(file_id=file_id, enqueued=enqueued, message=message, parsed=False)
 
 
-@router.post("/bulk-download")
-async def bulk_download(
-    payload: BulkDownloadRequest, session: AsyncSession = Depends(get_session)
-):
+@convert_router.post("/bulk-download")
+async def bulk_download(payload: BulkDownloadRequest, session: AsyncSession = Depends(get_session)):
     if not payload.file_ids:
         raise HTTPException(status_code=400, detail="file_ids is required")
 
