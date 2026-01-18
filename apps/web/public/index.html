@@ -793,7 +793,7 @@
       <div id="aiResultSection" class="layout" style="margin-top:16px; display:none;">
         <div class="card" style="grid-column: span 2;">
           <h3>AI 분석 결과</h3>
-          <div class="muted">결과가 준비되면 여기에 표시됩니다.</div>
+          <div id="aiResultView" class="muted">결과가 준비되면 여기에 표시됩니다.</div>
         </div>
       </div>
     </section>
@@ -1325,7 +1325,7 @@
       }
     }
 
-      async function loadParsed(file) {
+    async function loadParsed(file) {
         if (!file?.fileId) return;
         const data = await api(`/parsing/${file.fileId}/parsed1`);
         file.parsedData = data;
@@ -1348,6 +1348,75 @@
       initSmartSelects();
       updateResultList(true);
       renderResultView();
+    }
+
+    async function loadSemanticSummary(file) {
+      if (!file?.fileId) return;
+      const data = await api(`/parsing/${file.fileId}/semantic-summary`);
+      file.semanticSummary = data;
+    }
+
+    function renderAiResultView() {
+      const view = $("aiResultView");
+      if (!view) return;
+      const file = state.selectedResult;
+      if (!file || !file.semanticSummary) {
+        view.textContent = "분석 결과를 불러오는 중입니다...";
+        return;
+      }
+      const summary = file.semanticSummary || {};
+      const borders = Array.isArray(summary.borders) ? summary.borders : [];
+      const axis = Array.isArray(summary.axis_summaries) ? summary.axis_summaries : [];
+      const borderCount = summary.border_count ?? borders.length;
+      const axisItems = axis
+        .map((item, idx) => {
+          const xAxes = (item.x_axes || []).map((a) => `${a.label}(${a.coord?.toFixed?.(2) ?? a.coord})`).join(", ");
+          const yAxes = (item.y_axes || []).map((a) => `${a.label}(${a.coord?.toFixed?.(2) ?? a.coord})`).join(", ");
+          const xSpacing = (item.x_spacing || []).map((v) => (typeof v === "number" ? v.toFixed(2) : v)).join(", ");
+          const ySpacing = (item.y_spacing || []).map((v) => (typeof v === "number" ? v.toFixed(2) : v)).join(", ");
+          return `
+            <div class="card" style="margin-top:10px; background:var(--surface-2);">
+              <div style="font-weight:700;">도곽 ${item.border_index || idx + 1}</div>
+              <div class="muted" style="margin-top:4px;">X축선: ${xAxes || "없음"}</div>
+              <div class="muted">Y축선: ${yAxes || "없음"}</div>
+              <div class="muted">X축 간격: ${xSpacing || "없음"}</div>
+              <div class="muted">Y축 간격: ${ySpacing || "없음"}</div>
+            </div>
+          `;
+        })
+        .join("");
+      const columnTypes = Array.isArray(summary.column_types) ? summary.column_types : [];
+      const columnCount = typeof summary.column_count === "number" ? summary.column_count : 0;
+      const columnRows = columnTypes
+        .map((col) => {
+          const size = col.size || {};
+          const sizeLabel =
+            size.shape === "circle"
+              ? `R ${Number(size.radius || 0).toFixed(2)}`
+              : size.shape === "rect"
+              ? `${Number(size.width || 0).toFixed(2)} × ${Number(size.height || 0).toFixed(2)}`
+              : "-";
+          return `<tr><td>${col.type}</td><td>${sizeLabel}</td></tr>`;
+        })
+        .join("");
+      view.innerHTML = `
+        <div style="font-weight:700;">도곽 인식: ${borderCount}개</div>
+        ${axisItems || "<div class='muted' style='margin-top:6px;'>축선 결과 없음</div>"}
+        <div class="card" style="margin-top:12px; background:var(--surface-2);">
+          <div style="font-weight:700; margin-bottom:6px;">기둥 일람표 (${columnCount}개)</div>
+          <table style="width:100%; border-collapse: collapse;">
+            <thead>
+              <tr>
+                <th style="text-align:left; padding:6px 4px; border-bottom:1px solid var(--border);">Type</th>
+                <th style="text-align:left; padding:6px 4px; border-bottom:1px solid var(--border);">Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${columnRows || "<tr><td colspan='2' class='muted' style='padding:6px 4px;'>결과 없음</td></tr>"}
+            </tbody>
+          </table>
+        </div>
+      `;
     }
 
     async function startParse() {
@@ -1403,6 +1472,11 @@
               .finally(renderResultView);
           } else {
             renderResultView();
+          }
+          if ($("aiResultSection") && $("aiResultSection").style.display !== "none") {
+            loadSemanticSummary(f)
+              .catch(() => {})
+              .finally(renderAiResultView);
           }
         };
         list.appendChild(btn);
@@ -2060,6 +2134,10 @@
           } catch (err) {
             console.warn("parse2 실패", f.fileId, err);
           }
+        }
+        if (state.selectedResult) {
+          await loadSemanticSummary(state.selectedResult).catch(() => {});
+          renderAiResultView();
         }
         if (state.selectedResult && !state.selectedResult.parsedData) {
           await loadParsed(state.selectedResult);

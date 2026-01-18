@@ -385,6 +385,46 @@ async def get_entities_table(file_id: str, session: AsyncSession = Depends(get_s
     }
 
 
+@parsing_router.get("/{file_id}/semantic-summary")
+async def get_semantic_summary(file_id: str, session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(db_models.SemanticObject).where(db_models.SemanticObject.file_id == file_id))
+    rows = result.scalars().all()
+    borders = []
+    axis_summaries = []
+    columns = []
+    for row in rows:
+        if row.kind == "border":
+            borders.append(
+                {
+                    "handle": (row.properties or {}).get("insert_handle"),
+                    "block_name": (row.properties or {}).get("block_name"),
+                    "bbox_world": (row.properties or {}).get("bbox_world"),
+                }
+            )
+        elif row.kind == "axis_summary":
+            axis_summaries.append(row.properties or {})
+        elif row.kind == "concrete_column":
+            columns.append(row.properties or {})
+
+    column_types = {}
+    for col in columns:
+        ctype = col.get("column_type")
+        size = col.get("size")
+        if not ctype or not size:
+            continue
+        column_types.setdefault(ctype, size)
+    return {
+        "file_id": file_id,
+        "border_count": len(borders),
+        "borders": borders,
+        "axis_summaries": axis_summaries,
+        "column_count": len(columns),
+        "column_types": [
+            {"type": k, "size": v} for k, v in sorted(column_types.items(), key=lambda x: x[0])
+        ],
+    }
+
+
 @parsing_router.post("/{file_id}/parse1", response_model=ParseResponse)
 async def enqueue_parse1(file_id: str, session: AsyncSession = Depends(get_session)):
     # file 존재 확인
