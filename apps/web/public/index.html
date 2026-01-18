@@ -284,6 +284,10 @@
       flex-wrap: wrap;
     }
     .actions-center { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    .convert-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+    .convert-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); }
+    .convert-toggle .toggle-btn { border: none; background: transparent; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
+    .convert-toggle .toggle-btn.active { background: var(--accent); color: #fff; }
     .add-card {
       border: 1px dashed var(--border);
       border-radius: 12px;
@@ -574,7 +578,7 @@
         </div>
       </div>
       <div class="tabs">
-        <div class="tab" data-tab="convert">DXF 변환</div>
+      <div class="tab" data-tab="convert">DWG-DXF 변환</div>
         <div class="tab" data-tab="analyze">AI 도면 분석</div>
         <div class="tab" data-tab="generate">AI 도면 생성</div>
       </div>
@@ -591,9 +595,9 @@
       <div class="hero">
         <div class="pill">LAIKA · Intelligent Drawing Automation</div>
         <h1>DWG/DXF 파이프라인을 한 곳에서.<br />업로드·분석·생성을 모두 자동화하세요.</h1>
-        <p>DWG → DXF 변환, AI 기반 도면 분석, 도면 생성까지 하나의 워크플로우로 제공합니다. 업로드만 하면 버전 관리와 파싱, 분석 결과 시각화가 이어집니다.</p>
+        <p>DWG ↔ DXF 변환, AI 기반 도면 분석, 도면 생성까지 하나의 워크플로우로 제공합니다. 업로드만 하면 버전 관리와 파싱, 분석 결과 시각화가 이어집니다.</p>
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
-          <button class="btn primary" data-tab-jump="convert">DXF 변환 시작</button>
+          <button class="btn primary" data-tab-jump="convert">DWG-DXF 변환 시작</button>
           <button class="btn" data-tab-jump="analyze">AI 도면 분석 보기</button>
           <div class="pill-lock">로그인 시 AI 도면 분석 가능 · 구독 시 AI 도면 생성 활성화</div>
         </div>
@@ -603,7 +607,7 @@
           <h3>LAIKA가 하는 일</h3>
           <div class="muted">업로드 → 변환 → 파싱 → 분석 → 생성까지 이어지는 여정을 미리 확인하세요.</div>
           <div style="display:flex; flex-direction:column; gap:12px;">
-            <div class="capsule"><span class="pill-success">1</span>DWG를 DXF로 변환 (odaconverter)</div>
+            <div class="capsule"><span class="pill-success">1</span>DWG ↔ DXF 변환 (odaconverter)</div>
             <div class="capsule"><span class="pill-success">2</span>기본 파싱 (ezdxf) · 엔티티/레이어/블록 DB 적재</div>
             <div class="capsule"><span class="pill-warn">3</span>블록/레이어 역할 지정 · 축선/구조체/도곽 설정</div>
             <div class="capsule"><span class="pill-warn">4</span>AI 분석 실행 · 결과 표/다이아그램 다운로드</div>
@@ -614,7 +618,7 @@
           <h3>접근 권한</h3>
           <div class="muted">페이지별 이용 조건입니다.</div>
           <div style="display:flex; flex-direction:column; gap:10px;">
-            <div class="tag"><span class="pill-success">공개</span> DXF 변환 · 누구나 사용</div>
+            <div class="tag"><span class="pill-success">공개</span> DWG-DXF 변환 · 누구나 사용</div>
             <div class="tag"><span class="pill-warn">로그인 필요</span> AI 도면 분석 · 회원만</div>
             <div class="tag"><span class="pill-error">구독 필요</span> AI 도면 생성 · 결제 구독자 전용</div>
           </div>
@@ -684,16 +688,22 @@
     <section id="convert">
       <div class="hero">
         <div class="pill">STEP 1</div>
-        <h1>DXF 변환기</h1>
-        <p>웹에서 쉽게 DWG를 DXF로 변환하세요.</p>
+        <h1>DWG-DXF 변환기</h1>
+        <p>웹에서 바로 DWG ↔ DXF 변환할 수 있습니다.</p>
       </div>
       <div class="layout">
         <div class="card" style="grid-column: span 2;">
-          <h3>파일 업로드</h3>
+          <div class="convert-header">
+            <h3>파일 업로드</h3>
+            <div class="convert-toggle" id="convertToggle">
+              <button class="toggle-btn active" data-mode="dwg2dxf">DWG to DXF</button>
+              <button class="toggle-btn" data-mode="dxf2dwg">DXF to DWG</button>
+            </div>
+          </div>
           <div class="dropzone" id="dropConvert">
             <div class="drop-icon"></div>
-            <div style="font-size:17px; font-weight:700;">파일 선택</div>
-            <div class="muted" style="margin-top:6px;">또는 여기로 드롭 (최대 100MB)</div>
+            <div style="font-size:17px; font-weight:700;" id="convertDropTitle">파일 선택</div>
+            <div class="muted" style="margin-top:6px;" id="convertDropHint">또는 여기로 드롭 (최대 100MB)</div>
             <input type="file" id="inputConvert" accept=".dwg" multiple style="display:none;" />
           </div>
           <div class="file-list" id="convertList" style="display:none;"></div>
@@ -817,6 +827,7 @@
         { id: "bbb", pwd: "bbb", role: "user", subscribed: true },
       ],
       projectId: null,
+      convertMode: "dwg2dxf",
       convertFiles: [],
       analyzeFiles: [],
       selectedResult: null,
@@ -838,7 +849,7 @@
       uploading: "업로드 중",
       uploaded: "업로드 완료",
       processing: "처리 중",
-      converting: "DXF 변환 중",
+      converting: "변환 중",
       parsing: "파싱 중",
       done: "완료",
       failed: "실패",
@@ -983,7 +994,12 @@
     }
 
       function addFiles(kind, fileList) {
-        const allow = kind === "convert" ? [".dwg"] : [".dxf"];
+        const allow =
+          kind === "convert"
+            ? state.convertMode === "dxf2dwg"
+              ? [".dxf"]
+              : [".dwg"]
+            : [".dxf"];
         const target = kind === "convert" ? state.convertFiles : state.analyzeFiles;
         Array.from(fileList).forEach((f) => {
         const ext = `.${(f.name.split(".").pop() || "").toLowerCase()}`;
@@ -993,6 +1009,7 @@
         }
         target.push({
           kind,
+          convertMode: kind === "convert" ? state.convertMode : null,
           fileObj: f,
           name: f.name,
           size: f.size,
@@ -1014,7 +1031,7 @@
         }
       }
 
-    function bindDropzone(el, kind) {
+      function bindDropzone(el, kind) {
       ["dragenter", "dragover"].forEach((evt) =>
         el.addEventListener(evt, (e) => {
           e.preventDefault();
@@ -1031,9 +1048,25 @@
         e.preventDefault();
         addFiles(kind, e.dataTransfer.files);
       });
-    }
+      }
 
-    function setDetailTab(tab) {
+      function updateConvertModeUI() {
+        const mode = state.convertMode === "dxf2dwg" ? "dxf2dwg" : "dwg2dxf";
+        const input = $("inputConvert");
+        const title = $("convertDropTitle");
+        const hint = $("convertDropHint");
+        const toggle = $("convertToggle");
+        if (input) input.accept = mode === "dxf2dwg" ? ".dxf" : ".dwg";
+        if (title) title.textContent = mode === "dxf2dwg" ? "DXF 파일 선택" : "DWG 파일 선택";
+        if (hint) hint.textContent = mode === "dxf2dwg" ? "DXF → DWG 변환 (최대 100MB)" : "DWG → DXF 변환 (최대 100MB)";
+        if (toggle) {
+          toggle.querySelectorAll(".toggle-btn").forEach((btn) => {
+            btn.classList.toggle("active", btn.dataset.mode === mode);
+          });
+        }
+      }
+
+      function setDetailTab(tab) {
       document.querySelectorAll("[data-detail-tab]").forEach((btn) =>
         btn.classList.toggle("active", btn.dataset.detailTab === tab)
       );
@@ -1220,8 +1253,11 @@
       });
     }
 
-      async function startConvert() {
-        if (state.convertFiles.length === 0) return alert("업로드할 DWG 파일을 선택하세요.");
+    async function startConvert() {
+        if (state.convertFiles.length === 0) {
+          const msg = state.convertMode === "dxf2dwg" ? "업로드할 DXF 파일을 선택하세요." : "업로드할 DWG 파일을 선택하세요.";
+          return alert(msg);
+        }
         const btn = $("btnConvertStart");
         if (btn) btn.disabled = true;
         if (btn) btn.classList.add("is-loading");
@@ -1929,17 +1965,40 @@
       $("dropAnalyze").addEventListener("click", () => $("inputAnalyze").click());
       $("inputConvert").addEventListener("change", (e) => addFiles("convert", e.target.files));
       $("inputAnalyze").addEventListener("change", (e) => addFiles("analyze", e.target.files));
+      const convertToggle = $("convertToggle");
+      if (convertToggle) {
+        convertToggle.addEventListener("click", (e) => {
+          const btn = e.target.closest(".toggle-btn");
+          if (!btn) return;
+          const nextMode = btn.dataset.mode;
+          if (!nextMode || nextMode === state.convertMode) return;
+          if (state.convertFiles.length > 0) {
+            const ok = confirm("현재 업로드된 파일이 있습니다. 변환 방향을 바꾸면 목록이 초기화됩니다. 계속할까요?");
+            if (!ok) return;
+            state.convertFiles = [];
+            renderFileList("convert");
+          }
+          state.convertMode = nextMode;
+          updateConvertModeUI();
+        });
+      }
       bindDropzone($("dropConvert"), "convert");
       bindDropzone($("dropAnalyze"), "analyze");
       $("btnConvertStart").onclick = startConvert;
       $("btnConvertDownload").onclick = async () => {
         const doneFiles = state.convertFiles.filter((f) => f.status === "done" && f.pathDxf);
-        if (doneFiles.length === 0) return alert("완료된 DXF가 없습니다.");
+        if (doneFiles.length === 0) return alert("완료된 파일이 없습니다.");
+        const modeSet = new Set(doneFiles.map((f) => f.convertMode || "dwg2dxf"));
+        if (modeSet.size > 1) {
+          return alert("변환 방향이 섞여 있어 일괄 다운로드가 불가능합니다.");
+        }
+        const mode = doneFiles[0].convertMode || "dwg2dxf";
+        const kind = mode === "dxf2dwg" ? "dwg" : "dxf";
         try {
           const res = await fetch(`${API_BASE}/convert/bulk-download`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ file_ids: doneFiles.map((f) => f.fileId), kind: "dxf" }),
+            body: JSON.stringify({ file_ids: doneFiles.map((f) => f.fileId), kind }),
           });
           if (!res.ok) {
             const msg = await res.text();
@@ -2014,6 +2073,7 @@
     setTab("home");
     updateUserUI();
     bindEvents();
+    updateConvertModeUI();
   </script>
 </body>
 </html>

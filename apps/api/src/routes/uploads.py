@@ -220,7 +220,7 @@ async def _save_upload(
 
 @convert_router.post("/upload", response_model=UploadInitResponse, status_code=201)
 async def upload_convert(file: UploadFile = File(...), session: AsyncSession = Depends(get_session)):
-    return await _save_upload(session, file, version_label="convert", allowed_exts=("dwg",))
+    return await _save_upload(session, file, version_label="convert", allowed_exts=("dwg", "dxf"))
 
 
 @parsing_router.post("/upload", response_model=UploadInitResponse, status_code=201)
@@ -256,10 +256,11 @@ async def download_convert_file(file_id: str, kind: str = "dxf", session: AsyncS
     if not file_row:
         raise HTTPException(status_code=404, detail="file not found")
 
-    if kind == "dxf":
+    if kind in ("dxf", "dwg"):
         if not file_row.path_dxf or not Path(file_row.path_dxf).exists():
-            raise HTTPException(status_code=404, detail="DXF not ready")
-        return FileResponse(file_row.path_dxf, media_type="application/dxf", filename=Path(file_row.path_dxf).name)
+            raise HTTPException(status_code=404, detail="converted file not ready")
+        media_type = "application/dxf" if kind == "dxf" else "application/octet-stream"
+        return FileResponse(file_row.path_dxf, media_type=media_type, filename=Path(file_row.path_dxf).name)
 
     if kind == "original":
         if not file_row.path_original or not Path(file_row.path_original).exists():
@@ -418,13 +419,21 @@ async def enqueue_convert(file_id: str, session: AsyncSession = Depends(get_sess
 
     enqueued = False
     message: str | None = None
+    job_path = None
+    if file_row.type == "dwg":
+        job_path = "apps.worker.src.pipelines.convert.dwg_to_dxf.run"
+    elif file_row.type == "dxf":
+        job_path = "apps.worker.src.pipelines.convert.dxf_to_dwg.run"
+    else:
+        raise HTTPException(status_code=400, detail="unsupported file type for convert")
+
     try:
-        enqueue("apps.worker.src.pipelines.convert.dwg_to_dxf.run", file_row.path_original, file_id)
+        enqueue(job_path, file_row.path_original, file_id)
         enqueued = True
     except Exception as e:  # pragma: no cover
         import logging
 
-        logging.getLogger(__name__).warning("dwg_to_dxf enqueue 실패: %s", e)
+        logging.getLogger(__name__).warning("convert enqueue 실패: %s", e)
         message = str(e)
 
     return ParseResponse(file_id=file_id, enqueued=enqueued, message=message)
@@ -461,7 +470,7 @@ async def bulk_download(payload: BulkDownloadRequest, session: AsyncSession = De
         file_row = await session.get(db_models.File, fid)
         if not file_row:
             continue
-        if payload.kind == "dxf":
+        if payload.kind in ("dxf", "dwg"):
             if file_row.path_dxf and Path(file_row.path_dxf).exists():
                 paths.append(Path(file_row.path_dxf))
                 names.append(Path(file_row.path_dxf).name)

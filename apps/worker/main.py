@@ -10,7 +10,7 @@ import logging
 import sys
 from argparse import ArgumentParser, Namespace
 
-from apps.worker.src.pipelines.convert import dwg_to_dxf, convert_and_parse
+from apps.worker.src.pipelines.convert import dwg_to_dxf, dxf_to_dwg, convert_and_parse
 from apps.worker.src.pipelines.parse import dxf_parse, dxf_parse2
 from apps.worker.src.pipelines import semantic_build, index_project
 from packages.queue import rq_client
@@ -24,6 +24,7 @@ logger = logging.getLogger("worker")
 
 JOB_MAP = {
     "dwg_to_dxf": dwg_to_dxf.run,
+    "dxf_to_dwg": dxf_to_dwg.run,
     "dxf_parse": dxf_parse.run,
     "dxf_parse2": dxf_parse2,
     "convert_and_parse": convert_and_parse.run,
