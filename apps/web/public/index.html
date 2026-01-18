@@ -2053,6 +2053,14 @@
         if (!state.selectedResult || !doneFiles.includes(state.selectedResult)) {
           state.selectedResult = doneFiles[0];
         }
+        const parse2Payload = { selections: { ...state.selectedOptions } };
+        for (const f of doneFiles) {
+          try {
+            await api(`/parsing/${f.fileId}/parse2`, { method: "POST", body: parse2Payload });
+          } catch (err) {
+            console.warn("parse2 실패", f.fileId, err);
+          }
+        }
         if (state.selectedResult && !state.selectedResult.parsedData) {
           await loadParsed(state.selectedResult);
         }

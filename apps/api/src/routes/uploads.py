@@ -73,6 +73,11 @@ class ParseResponse(BaseModel):
     meta_path: str | None = None
 
 
+class Parse2Request(BaseModel):
+    selections: dict[str, list[str]] | None = None
+    rules: list[dict[str, Any]] | None = None
+
+
 class BulkDownloadRequest(BaseModel):
     file_ids: list[str]
     kind: str = "dxf"
@@ -440,15 +445,21 @@ async def enqueue_convert(file_id: str, session: AsyncSession = Depends(get_sess
 
 
 @parsing_router.post("/{file_id}/parse2", response_model=ParseResponse)
-async def enqueue_parse2(file_id: str, session: AsyncSession = Depends(get_session)):
+async def enqueue_parse2(
+    file_id: str,
+    payload: Parse2Request | None = None,
+    session: AsyncSession = Depends(get_session),
+):
     file_row = await session.get(db_models.File, file_id)
     if not file_row:
         raise HTTPException(status_code=404, detail="file not found")
 
     enqueued = False
     message: str | None = None
+    selections = payload.selections if payload else None
+    rules = payload.rules if payload else None
     try:
-        enqueue("apps.worker.src.pipelines.parse.dxf_parse2", file_id=file_id)
+        enqueue("apps.worker.src.pipelines.parse.dxf_parse2", file_id=file_id, selections=selections, rules=rules)
         enqueued = True
     except Exception as e:  # pragma: no cover
         import logging
