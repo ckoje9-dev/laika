@@ -1225,7 +1225,7 @@
                       state.selectedResult = state.analyzeFiles[0];
                     }
                     if (state.selectedResult && !state.selectedResult.entitiesTable) {
-                      await loadEntitiesTable(state.selectedResult).catch(() => {});
+                      await refreshEntitiesTable(state.selectedResult).catch(() => {});
                     }
                     $("resultSection").style.display = "grid";
                     updateResultList(true);
@@ -1371,6 +1371,19 @@
       }
     }
 
+    async function refreshEntitiesTable(file, retries = 4) {
+      if (!file?.fileId) return;
+      for (let i = 0; i <= retries; i++) {
+        try {
+          await loadEntitiesTable(file);
+          if (Array.isArray(file.entitiesTable) && file.entitiesTable.length > 0) return;
+        } catch (err) {
+          // entities-table 준비 전 404는 잠시 대기 후 재시도
+        }
+        await sleep(800);
+      }
+    }
+
     function renderAiResultView() {
       const view = $("aiResultView");
       if (!view) return;
@@ -1482,7 +1495,7 @@
             loadParsed(f).catch(() => {});
           }
           if (!f.entitiesTable && f.fileId) {
-            loadEntitiesTable(f)
+            refreshEntitiesTable(f)
               .catch(() => {})
               .finally(renderResultView);
           } else {
