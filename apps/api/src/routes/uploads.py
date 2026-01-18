@@ -392,19 +392,31 @@ async def get_semantic_summary(file_id: str, session: AsyncSession = Depends(get
     borders = []
     axis_summaries = []
     columns = []
+    def _decode_props(value: Any) -> dict:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+        return {}
     for row in rows:
+        props = _decode_props(row.properties)
         if row.kind == "border":
+            if not props.get("bbox_world"):
+                continue
             borders.append(
                 {
-                    "handle": (row.properties or {}).get("insert_handle"),
-                    "block_name": (row.properties or {}).get("block_name"),
-                    "bbox_world": (row.properties or {}).get("bbox_world"),
+                    "handle": props.get("insert_handle"),
+                    "block_name": props.get("block_name"),
+                    "bbox_world": props.get("bbox_world"),
                 }
             )
         elif row.kind == "axis_summary":
-            axis_summaries.append(row.properties or {})
+            axis_summaries.append(props)
         elif row.kind == "concrete_column":
-            columns.append(row.properties or {})
+            columns.append(props)
 
     column_types = {}
     for col in columns:

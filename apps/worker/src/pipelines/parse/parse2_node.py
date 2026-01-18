@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import math
+import json
 from typing import Any, Iterable, Optional
 
 from sqlalchemy import text
@@ -70,7 +71,7 @@ def _extract_layer_names(tables: dict[str, Any] | None, entities: list[dict[str,
     return layers
 
 
-def _match_rule(entity: dict[str, Any], rules: list[dict[str, Any]]) -> tuple[str, str]:
+def _match_rule(entity: dict[str, Any], rules: list[dict[str, Any]]) -> tuple[Optional[str], Optional[str]]:
     layer = str(entity.get("layer") or entity.get("layerName") or "").upper()
     dtype = str(entity.get("type") or "").upper()
     name = str(entity.get("name") or entity.get("block") or entity.get("block_name") or "").upper()
@@ -93,7 +94,7 @@ def _match_rule(entity: dict[str, Any], rules: list[dict[str, Any]]) -> tuple[st
                 return rule["kind"], f"block:{name}"
             if match != "exact" and any(k in name for k in keys):
                 return rule["kind"], f"block:{name}"
-    return dtype.lower() if dtype else "unknown", "type:unknown"
+    return None, None
 
 
 def _build_semantic_records(
@@ -106,6 +107,8 @@ def _build_semantic_records(
         if not isinstance(ent, dict):
             continue
         kind, source_rule = _match_rule(ent, rules)
+        if not kind:
+            continue
         records.append(
             {
                 "file_id": file_id,
@@ -138,6 +141,18 @@ def _rules_from_selections(selections: dict[str, list[str]] | None) -> list[dict
 def _extract_points(entity: dict[str, Any]) -> list[tuple[float, float]]:
     dtype = entity.get("type")
     if dtype == "LINE":
+        verts = entity.get("vertices")
+        if isinstance(verts, list) and len(verts) >= 2:
+            pts = []
+            for v in verts:
+                if not isinstance(v, dict):
+                    continue
+                x = v.get("x")
+                y = v.get("y")
+                if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+                    pts.append((float(x), float(y)))
+            if len(pts) >= 2:
+                return pts
         sp = entity.get("startPoint") or entity.get("start") or entity.get("start_point")
         ep = entity.get("endPoint") or entity.get("end") or entity.get("end_point")
         if isinstance(sp, dict) and isinstance(ep, dict):
@@ -534,6 +549,38 @@ async def run(
         entity_count = len(entities)
 
         effective_rules = rules or _rules_from_selections(selections) or DEFAULT_RULES
+        if selections:
+            logger.info(
+                "parse2 selections: border=%s axis=%s ccol=%s",
+                selections.get("basic-border-block"),
+                selections.get("struct-axis-layer"),
+                selections.get("struct-ccol-layer"),
+            )
+            if selections.get("basic-border-block"):
+                block_name = str(selections.get("basic-border-block")[0])
+                insert_hits = [
+                    e for e in entities if isinstance(e, dict) and e.get("type") == "INSERT" and str(e.get("name") or "").upper() == block_name.upper()
+                ]
+                logger.info("border block=%s blocks=%s inserts=%s", block_name, len(blocks), len(insert_hits))
+            if selections.get("struct-axis-layer"):
+                axis_layers = {str(v).upper() for v in selections.get("struct-axis-layer") or [] if v}
+                axis_hits = [
+                    e
+                    for e in entities
+                    if isinstance(e, dict)
+                    and e.get("type") in ("LINE", "LWPOLYLINE")
+                    and str(e.get("layer") or e.get("layerName") or "").upper() in axis_layers
+                ]
+                logger.info("axis layers=%s hits=%s", list(axis_layers), len(axis_hits))
+            if selections.get("struct-ccol-layer"):
+                col_layers = {str(v).upper() for v in selections.get("struct-ccol-layer") or [] if v}
+                col_hits = [
+                    e
+                    for e in entities
+                    if isinstance(e, dict)
+                    and str(e.get("layer") or e.get("layerName") or "").upper() in col_layers
+                ]
+                logger.info("column layers=%s hits=%s", list(col_layers), len(col_hits))
         records = _build_semantic_records(entities, file_id, effective_rules)
         border_records = _build_border_records(file_id, blocks, entities, selections)
         if border_records:
@@ -564,11 +611,15 @@ async def run(
         try:
             await session.execute(text("delete from semantic_objects where file_id = :file_id"), {"file_id": file_id})
             if records:
+                for rec in records:
+                    if "properties" not in rec or rec["properties"] is None:
+                        rec["properties"] = {}
+                    rec["properties"] = json.dumps(rec["properties"], ensure_ascii=False)
                 await session.execute(
                     text(
                         """
                         insert into semantic_objects (file_id, kind, confidence, source_rule, properties, created_at)
-                        values (:file_id, :kind, :confidence, :source_rule, :properties, now())
+                        values (:file_id, :kind, :confidence, :source_rule, CAST(:properties AS JSONB), now())
                         """
                     ),
                     records,

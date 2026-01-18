@@ -1356,6 +1356,21 @@
       file.semanticSummary = data;
     }
 
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    async function refreshSemanticSummary(file, retries = 4) {
+      if (!file?.fileId) return;
+      for (let i = 0; i <= retries; i++) {
+        await loadSemanticSummary(file);
+        const summary = file.semanticSummary || {};
+        const hasBorder = (summary.border_count || 0) > 0;
+        const hasAxis = Array.isArray(summary.axis_summaries) && summary.axis_summaries.length > 0;
+        const hasColumns = (summary.column_count || 0) > 0;
+        if (hasBorder || hasAxis || hasColumns) return;
+        await sleep(800);
+      }
+    }
+
     function renderAiResultView() {
       const view = $("aiResultView");
       if (!view) return;
@@ -1474,7 +1489,7 @@
             renderResultView();
           }
           if ($("aiResultSection") && $("aiResultSection").style.display !== "none") {
-            loadSemanticSummary(f)
+            refreshSemanticSummary(f)
               .catch(() => {})
               .finally(renderAiResultView);
           }
@@ -2136,7 +2151,7 @@
           }
         }
         if (state.selectedResult) {
-          await loadSemanticSummary(state.selectedResult).catch(() => {});
+          await refreshSemanticSummary(state.selectedResult).catch(() => {});
           renderAiResultView();
         }
         if (state.selectedResult && !state.selectedResult.parsedData) {
