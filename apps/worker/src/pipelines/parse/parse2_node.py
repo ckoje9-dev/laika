@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any, Iterable, Optional
 
 from sqlalchemy import text
@@ -134,6 +135,118 @@ def _rules_from_selections(selections: dict[str, list[str]] | None) -> list[dict
     return rules
 
 
+def _block_bbox_from_entities(block_entities: list[dict[str, Any]]) -> dict[str, float] | None:
+    xs: list[float] = []
+    ys: list[float] = []
+    for ent in block_entities:
+        if not isinstance(ent, dict):
+            continue
+        verts = ent.get("vertices")
+        if not isinstance(verts, list):
+            continue
+        for v in verts:
+            if not isinstance(v, dict):
+                continue
+            x = v.get("x")
+            y = v.get("y")
+            if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+                xs.append(float(x))
+                ys.append(float(y))
+    if not xs or not ys:
+        return None
+    return {
+        "min_x": min(xs),
+        "min_y": min(ys),
+        "max_x": max(xs),
+        "max_y": max(ys),
+    }
+
+
+def _transform_bbox(bbox: dict[str, float], insert: dict[str, Any]) -> dict[str, float]:
+    tx = (insert.get("position") or {}).get("x", 0) if isinstance(insert.get("position"), dict) else insert.get("x", 0)
+    ty = (insert.get("position") or {}).get("y", 0) if isinstance(insert.get("position"), dict) else insert.get("y", 0)
+    sx = insert.get("xScale") or 1
+    sy = insert.get("yScale") or 1
+    rot = insert.get("rotation") or 0
+    theta = math.radians(rot)
+    cos_t = math.cos(theta)
+    sin_t = math.sin(theta)
+
+    corners = [
+        (bbox["min_x"], bbox["min_y"]),
+        (bbox["max_x"], bbox["min_y"]),
+        (bbox["max_x"], bbox["max_y"]),
+        (bbox["min_x"], bbox["max_y"]),
+    ]
+    world_points: list[tuple[float, float]] = []
+    for x, y in corners:
+        xs = x * sx
+        ys = y * sy
+        xr = xs * cos_t - ys * sin_t
+        yr = xs * sin_t + ys * cos_t
+        xw = xr + tx
+        yw = yr + ty
+        world_points.append((xw, yw))
+
+    xs = [p[0] for p in world_points]
+    ys = [p[1] for p in world_points]
+    return {"xmin": min(xs), "ymin": min(ys), "xmax": max(xs), "ymax": max(ys)}
+
+
+def _build_border_records(
+    file_id: str,
+    blocks: dict[str, Any],
+    entities: list[dict[str, Any]],
+    selections: dict[str, list[str]] | None,
+) -> list[dict[str, Any]]:
+    if not selections:
+        return []
+    selected = selections.get("basic-border-block") or []
+    if not selected:
+        return []
+    block_name = str(selected[0])
+    block_key = block_name
+    if isinstance(blocks, dict) and block_name not in blocks:
+        for k in blocks.keys():
+            if str(k).upper() == block_name.upper():
+                block_key = k
+                break
+    block_def = blocks.get(block_key) if isinstance(blocks, dict) else None
+    if not isinstance(block_def, dict):
+        return []
+    block_entities = block_def.get("entities")
+    if not isinstance(block_entities, list):
+        return []
+    base_bbox = _block_bbox_from_entities(block_entities)
+    if not base_bbox:
+        return []
+
+    records: list[dict[str, Any]] = []
+    for ent in entities:
+        if not isinstance(ent, dict):
+            continue
+        if ent.get("type") != "INSERT":
+            continue
+        if str(ent.get("name") or "").upper() != block_name.upper():
+            continue
+        world_bbox = _transform_bbox(base_bbox, ent)
+        records.append(
+            {
+                "file_id": file_id,
+                "kind": "border",
+                "confidence": None,
+                "source_rule": f"block:{block_key}",
+                "properties": {
+                    "block_name": block_key,
+                    "insert_handle": ent.get("handle"),
+                    "bbox_local": base_bbox,
+                    "bbox_world": world_bbox,
+                },
+            }
+        )
+    return records
+
+
 async def run(
     file_id: Optional[str] = None,
     selections: dict[str, list[str]] | None = None,
@@ -151,12 +264,16 @@ async def run(
             return
 
         tables = section_row.tables if isinstance(section_row.tables, dict) else {}
+        blocks = section_row.blocks if isinstance(section_row.blocks, dict) else {}
         entities = section_row.entities if isinstance(section_row.entities, list) else []
         layers = _extract_layer_names(tables, entities)
         entity_count = len(entities)
 
         effective_rules = rules or _rules_from_selections(selections) or DEFAULT_RULES
         records = _build_semantic_records(entities, file_id, effective_rules)
+        border_records = _build_border_records(file_id, blocks, entities, selections)
+        if border_records:
+            records.extend(border_records)
 
         try:
             await session.execute(text("delete from semantic_objects where file_id = :file_id"), {"file_id": file_id})
