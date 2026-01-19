@@ -554,6 +554,15 @@
       color: var(--muted);
       font-size: 13px;
     }
+    .color-swatch {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      vertical-align: middle;
+      margin-right: 6px;
+    }
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(6px); }
       to { opacity: 1; transform: translateY(0); }
@@ -1411,7 +1420,7 @@
       const list = $("aiBorderList");
       if (!view) return;
       const file = state.selectedResult;
-      if (!file || !file.semanticSummary) {
+      if (!file) {
         view.textContent = "분석 결과를 불러오는 중입니다...";
         return;
       }
@@ -1452,6 +1461,13 @@
       const yAxes = active.y_axes || [];
       const xSpacing = active.x_spacing || [];
       const ySpacing = active.y_spacing || [];
+      const borderBBox = (() => {
+        if (active?.bbox) return active.bbox;
+        if (active?.bbox_world) return active.bbox_world;
+        const fallbackIdx = typeof active.border_index === "number" ? active.border_index - 1 : selectedIdx;
+        const item = (summary.borders || [])[fallbackIdx];
+        return item?.bbox_world || null;
+      })();
 
       const formatAxisLine = (axes, spacing) => {
         if (!axes.length) return "없음";
@@ -1460,7 +1476,10 @@
           const label = axisItem.label || `X${idx + 1}`;
           parts.push(label);
           if (idx < spacing.length) {
-            const dist = typeof spacing[idx] === "number" ? spacing[idx].toFixed(2) : spacing[idx];
+            let dist = spacing[idx];
+            if (typeof dist === "number") {
+              dist = dist.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
             parts.push(`←${dist}→`);
           }
         });
@@ -1508,6 +1527,7 @@
           </table>
         </div>
       `;
+      renderDxfPreview(file, borderBBox);
     }
 
     async function startParse() {
@@ -1841,7 +1861,7 @@
         if (wrap) {
           wrap.innerHTML = tableHtml;
           file._skipPreviewUpdate = false;
-          document.querySelectorAll("th.sortable").forEach((th) => {
+          document.querySelectorAll("th.sortable[data-sort]").forEach((th) => {
             th.onclick = () => {
               const key = th.dataset.sort;
               const current = file.entitySort || { key: null, dir: "asc" };
@@ -1864,6 +1884,7 @@
       const layersRows = Object.entries(layerSource).map(([name, info]) => ({
         name,
         colorIndex: info?.colorIndex ?? info?.colorindex ?? info?.color_index ?? "-",
+        color: info?.color ?? null,
         visible: info?.visible ?? "-",
         frozen: info?.frozen ?? "-",
       }));
@@ -1885,22 +1906,76 @@
       const blockNames = Array.isArray(data.blocks)
         ? data.blocks.map((b) => b?.name || b?.block_name || b).filter(Boolean)
         : Object.keys(data.sections?.blocks || {});
-      const blocksRows = (blockNames.length ? blockNames : Object.keys(blockCounts)).map((name) => ({
-        name,
-        count: blockCounts[name] || 0,
-      }));
+      const blockRowsSource = blockNames.length ? blockNames : Object.keys(blockCounts);
+      const blocksRows = blockRowsSource
+        .filter((name) => !String(name).startsWith("*"))
+        .map((name) => ({ name, count: blockCounts[name] || 0 }));
       const layerCountLabel = Number(layersRows.length || 0).toLocaleString("en-US");
       const blockCountLabel = Number(blocksRows.length || 0).toLocaleString("en-US");
+      const layerSort = file.layerSort || { key: "name", dir: "asc" };
+      const blockSort = file.blockSort || { key: "name", dir: "asc" };
+      if (!layerSort.key) layerSort.key = "name";
+      if (!blockSort.key) blockSort.key = "name";
+      file.layerSort = layerSort;
+      file.blockSort = blockSort;
+      const sortRows = (rows, sortState) => {
+        const { key, dir } = sortState || {};
+        if (!key) return rows;
+        const dirMul = dir === "desc" ? -1 : 1;
+        return [...rows].sort((a, b) => {
+          const av = a?.[key];
+          const bv = b?.[key];
+          if (av === bv) return 0;
+          return av > bv ? dirMul : -dirMul;
+        });
+      };
+      const colorIndexFallback = (value) => {
+        const idx = Number(value);
+        if (!Number.isFinite(idx)) return "#999999";
+        const map = {
+          1: "#ff0000",
+          2: "#ffff00",
+          3: "#00ff00",
+          4: "#00ffff",
+          5: "#0000ff",
+          6: "#ff00ff",
+          7: "#ffffff",
+        };
+        return map[idx] || "#999999";
+      };
+      const colorToHex = (value) => {
+        if (typeof value === "number" && Number.isFinite(value)) {
+          const hex = value.toString(16).padStart(6, "0");
+          return `#${hex}`;
+        }
+        return null;
+      };
+      const sortedLayers = sortRows(layersRows, layerSort);
+      const sortedBlocks = sortRows(blocksRows, blockSort);
+      const layerSortArrow = (key) => {
+        const active = layerSort.key === key;
+        return {
+          icon: active ? (layerSort.dir === "asc" ? "▲" : "▼") : "▲",
+          cls: active ? "sort-arrow" : "sort-arrow muted",
+        };
+      };
+      const blockSortArrow = (key) => {
+        const active = blockSort.key === key;
+        return {
+          icon: active ? (blockSort.dir === "asc" ? "▲" : "▼") : "▲",
+          cls: active ? "sort-arrow" : "sort-arrow muted",
+        };
+      };
 
       view.innerHTML = `
         <div class="config-columns" style="margin-top:8px;">
           <div>
             <div style="font-weight:700; margin-bottom:6px;">레이어 TABLE (${layerCountLabel} layers)</div>
-            <div class="table-wrap">
+            <div class="table-wrap sticky-table" style="max-height:220px;" id="layerTableWrap">
               <table>
                 <thead>
                   <tr>
-                    <th>layer_name</th>
+                    <th class="sortable" data-layer-sort="name">layer_name <span class="${layerSortArrow("name").cls}">${layerSortArrow("name").icon}</span></th>
                     <th>colorindex</th>
                     <th>visible</th>
                     <th>frozen</th>
@@ -1908,12 +1983,12 @@
                 </thead>
                 <tbody>
                   ${
-                    layersRows.length
-                      ? layersRows
-                          .map(
-                            (row) =>
-                              `<tr><td>${row.name}</td><td>${row.colorIndex}</td><td>${row.visible}</td><td>${row.frozen}</td></tr>`
-                          )
+                    sortedLayers.length
+                      ? sortedLayers
+                          .map((row) => {
+                            const colorHex = colorToHex(row.color) || colorIndexFallback(row.colorIndex);
+                            return `<tr><td>${row.name}</td><td><span class="color-swatch" style="background:${colorHex};"></span>${row.colorIndex}</td><td>${row.visible}</td><td>${row.frozen}</td></tr>`;
+                          })
                           .join("")
                       : `<tr><td colspan="4">레이어 정보 없음</td></tr>`
                   }
@@ -1923,18 +1998,18 @@
           </div>
           <div>
             <div style="font-weight:700; margin-bottom:6px;">블록 TABLE (${blockCountLabel} blocks)</div>
-            <div class="table-wrap">
+            <div class="table-wrap sticky-table" style="max-height:220px;" id="blockTableWrap">
               <table>
                 <thead>
                   <tr>
-                    <th>block_name</th>
-                    <th>block_cnt</th>
+                    <th class="sortable" data-block-sort="name">block_name <span class="${blockSortArrow("name").cls}">${blockSortArrow("name").icon}</span></th>
+                    <th class="sortable" data-block-sort="count">block_cnt <span class="${blockSortArrow("count").cls}">${blockSortArrow("count").icon}</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   ${
-                    blocksRows.length
-                      ? blocksRows
+                    sortedBlocks.length
+                      ? sortedBlocks
                           .map((row) => `<tr><td>${row.name}</td><td>${row.count}</td></tr>`)
                           .join("")
                       : `<tr><td colspan="2">블록 정보 없음</td></tr>`
@@ -1956,7 +2031,26 @@
           </div>
         `;
 
-        document.querySelectorAll("th.sortable").forEach((th) => {
+      document.querySelectorAll("[data-layer-sort]").forEach((th) => {
+        th.onclick = () => {
+          const key = th.dataset.layerSort;
+          const current = file.layerSort || { key: "name", dir: "asc" };
+          const nextDir = current.key === key && current.dir === "asc" ? "desc" : "asc";
+          file.layerSort = { key, dir: nextDir };
+          renderResultView();
+        };
+      });
+      document.querySelectorAll("[data-block-sort]").forEach((th) => {
+        th.onclick = () => {
+          const key = th.dataset.blockSort;
+          const current = file.blockSort || { key: "name", dir: "asc" };
+          const nextDir = current.key === key && current.dir === "asc" ? "desc" : "asc";
+          file.blockSort = { key, dir: nextDir };
+          renderResultView();
+        };
+      });
+
+        document.querySelectorAll("th.sortable[data-sort]").forEach((th) => {
           th.onclick = () => {
             const key = th.dataset.sort;
             const current = file.entitySort || { key: null, dir: "asc" };
@@ -1967,7 +2061,6 @@
           };
         });
 
-      renderDxfPreview(file);
     }
 
     function downloadEntitiesCsv() {
@@ -2134,11 +2227,11 @@
       return state.parserLib;
     }
 
-    async function renderDxfPreview(file) {
+    async function renderDxfPreview(file, borderBBox) {
       const container = $("dxfPreview");
       if (!container) return;
       container.innerHTML = "";
-      if (!file.pathDxf) {
+      if (!file.fileId) {
         container.innerHTML = '<div class="muted" style="padding:12px;">DXF 파일이 준비되면 미리보기를 표시합니다.</div>';
         return;
       }
@@ -2187,11 +2280,48 @@
         return;
       }
 
+      let capturedCamera = null;
+      const Ortho = window.THREE?.OrthographicCamera;
+      if (Ortho) {
+        window.THREE.OrthographicCamera = function (...args) {
+          const cam = new Ortho(...args);
+          capturedCamera = cam;
+          return cam;
+        };
+        window.THREE.OrthographicCamera.prototype = Ortho.prototype;
+      }
       try {
         const width = container.clientWidth || container.offsetWidth || 600;
         const height = container.clientHeight || container.offsetHeight || 340;
         const viewer = new threeDxf.Viewer(parsed, canvas, width, height, font || undefined);
         if (viewer.render) viewer.render();
+        if (capturedCamera && borderBBox) {
+          const xmin = Number(borderBBox.xmin);
+          const ymin = Number(borderBBox.ymin);
+          const xmax = Number(borderBBox.xmax);
+          const ymax = Number(borderBBox.ymax);
+          if ([xmin, ymin, xmax, ymax].every(Number.isFinite)) {
+            const pad = 0.05;
+            let viewW = Math.max(1, (xmax - xmin) * (1 + pad));
+            let viewH = Math.max(1, (ymax - ymin) * (1 + pad));
+            const aspect = width / height;
+            if (aspect > viewW / viewH) {
+              viewW = viewH * aspect;
+            } else {
+              viewH = viewW / aspect;
+            }
+            capturedCamera.left = -viewW / 2;
+            capturedCamera.right = viewW / 2;
+            capturedCamera.top = viewH / 2;
+            capturedCamera.bottom = -viewH / 2;
+            capturedCamera.position.x = (xmin + xmax) / 2;
+            capturedCamera.position.y = (ymin + ymax) / 2;
+            capturedCamera.position.z = 10;
+            capturedCamera.updateProjectionMatrix();
+            capturedCamera.lookAt(capturedCamera.position.x, capturedCamera.position.y, 0);
+            if (viewer.render) viewer.render();
+          }
+        }
         window.addEventListener("resize", () => viewer.resize && viewer.resize(container.clientWidth, container.clientHeight));
         loading.remove();
       } catch (err) {
@@ -2199,6 +2329,10 @@
           '<div class="muted" style="padding:12px;">뷰어 렌더링 실패: ' +
           (err?.message || err?.toString?.() || "알 수 없는 오류") +
           '</div>';
+      } finally {
+        if (Ortho) {
+          window.THREE.OrthographicCamera = Ortho;
+        }
       }
     }
 
