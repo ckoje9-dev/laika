@@ -1390,6 +1390,22 @@
       }
     }
 
+    async function refreshParsedData(file, retries = 4) {
+      if (!file?.fileId) return;
+      for (let i = 0; i <= retries; i++) {
+        try {
+          await loadParsed(file);
+          const hasTables = !!(file.parsedData && file.parsedData.tables);
+          const hasLayers = Array.isArray(file.parsedData?.layers) && file.parsedData.layers.length > 0;
+          const hasBlocks = Array.isArray(file.parsedData?.blocks) && file.parsedData.blocks.length > 0;
+          if (file.parsedData && (hasTables || hasLayers || hasBlocks)) return;
+        } catch (err) {
+          // parsed1 준비 전 오류는 잠시 대기 후 재시도
+        }
+        await sleep(800);
+      }
+    }
+
     function renderAiResultView() {
       const view = $("aiResultView");
       const list = $("aiBorderList");
@@ -1508,6 +1524,8 @@
             await uploadOne(file, "/parsing/upload");
           await api(`/parsing/${file.fileId}/parse1`, { method: "POST" });
           await pollStatus(file, "analyze");
+          await refreshParsedData(file).catch(() => {});
+          await refreshEntitiesTable(file).catch(() => {});
         } catch (err) {
           file.status = "failed";
           file.statusLabel = statusCopy.failed;
@@ -1566,7 +1584,27 @@
         view.innerHTML = '<div class="muted">파싱 결과를 보려면 파일을 선택하세요.</div>';
         return;
       }
-      if (!file.parsedData) {
+      if (!file.parsedData || !file.entitiesTable) {
+        if (file.fileId) {
+          if (!file._loadingParsed && !file.parsedData) {
+            file._loadingParsed = true;
+            refreshParsedData(file)
+              .catch(() => {})
+              .finally(() => {
+                file._loadingParsed = false;
+                renderResultView();
+              });
+          }
+          if (!file._loadingEntities && !file.entitiesTable) {
+            file._loadingEntities = true;
+            refreshEntitiesTable(file)
+              .catch(() => {})
+              .finally(() => {
+                file._loadingEntities = false;
+                renderResultView();
+              });
+          }
+        }
         view.innerHTML = '<div class="muted">파싱 결과를 불러오는 중입니다...</div>';
         return;
       }
@@ -1818,8 +1856,94 @@
         file._skipPreviewUpdate = false;
       }
 
+      const layerSource =
+        data.tables?.layer?.layers ||
+        data.tables?.layers ||
+        data.sections?.tables?.layer?.layers ||
+        {};
+      const layersRows = Object.entries(layerSource).map(([name, info]) => ({
+        name,
+        colorIndex: info?.colorIndex ?? info?.colorindex ?? info?.color_index ?? "-",
+        visible: info?.visible ?? "-",
+        frozen: info?.frozen ?? "-",
+      }));
+      if (!layersRows.length && Array.isArray(data.layers)) {
+        data.layers.forEach((row) => {
+          const name = row?.name || row?.layer || row;
+          if (name) layersRows.push({ name, colorIndex: "-", visible: "-", frozen: "-" });
+        });
+      }
+      const entityList = Array.isArray(data.entities) ? data.entities : [];
+      const blockCounts = entityList.reduce((acc, ent) => {
+        const name = ent?.properties?.name || ent?.name;
+        const type = ent?.properties?.type || ent?.type;
+        if (type === "INSERT" && name) {
+          acc[name] = (acc[name] || 0) + 1;
+        }
+        return acc;
+      }, {});
+      const blockNames = Array.isArray(data.blocks)
+        ? data.blocks.map((b) => b?.name || b?.block_name || b).filter(Boolean)
+        : Object.keys(data.sections?.blocks || {});
+      const blocksRows = (blockNames.length ? blockNames : Object.keys(blockCounts)).map((name) => ({
+        name,
+        count: blockCounts[name] || 0,
+      }));
+      const layerCountLabel = Number(layersRows.length || 0).toLocaleString("en-US");
+      const blockCountLabel = Number(blocksRows.length || 0).toLocaleString("en-US");
+
       view.innerHTML = `
-        <h3 style="margin:8px 0 6px;">파일: ${file.name} / 단위: ${data.unit || "mm"}</h3>
+        <div class="config-columns" style="margin-top:8px;">
+          <div>
+            <div style="font-weight:700; margin-bottom:6px;">레이어 TABLE (${layerCountLabel} layers)</div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>layer_name</th>
+                    <th>colorindex</th>
+                    <th>visible</th>
+                    <th>frozen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${
+                    layersRows.length
+                      ? layersRows
+                          .map(
+                            (row) =>
+                              `<tr><td>${row.name}</td><td>${row.colorIndex}</td><td>${row.visible}</td><td>${row.frozen}</td></tr>`
+                          )
+                          .join("")
+                      : `<tr><td colspan="4">레이어 정보 없음</td></tr>`
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <div style="font-weight:700; margin-bottom:6px;">블록 TABLE (${blockCountLabel} blocks)</div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>block_name</th>
+                    <th>block_cnt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${
+                    blocksRows.length
+                      ? blocksRows
+                          .map((row) => `<tr><td>${row.name}</td><td>${row.count}</td></tr>`)
+                          .join("")
+                      : `<tr><td colspan="2">블록 정보 없음</td></tr>`
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
         <div style="margin-top:8px;">
           <div style="font-weight:700; margin:6px 0;">엔티티 TABLE (${totalEntitiesLabel} entities)</div>
           <div class="table-wrap sticky-table" id="entityTableWrap">
