@@ -766,10 +766,10 @@
               <div class="row-select compact"><label>치수</label><div class="smart-select compact-select" id="basic-dim-layer" data-select-type="layer"></div></div>
               <div class="row-select compact"><label>심볼</label><div class="smart-select compact-select" id="basic-symbol-layer" data-select-type="layer"></div></div>
               <div class="row-select compact"><label>텍스트</label><div class="smart-select compact-select" id="basic-text-layer" data-select-type="layer"></div></div>
+              <div class="row-select compact"><label>축선</label><div class="smart-select compact-select" id="struct-axis-layer" data-select-type="layer"></div></div>
             </div>
             <div class="config-card">
               <h4>구조 요소</h4>
-              <div class="row-select compact"><label>축선</label><div class="smart-select compact-select" id="struct-axis-layer" data-select-type="layer"></div></div>
               <div class="row-select compact"><label>콘크리트 기둥</label><div class="smart-select compact-select" id="struct-ccol-layer" data-select-type="layer"></div></div>
               <div class="row-select compact"><label>철골 기둥</label><div class="smart-select compact-select" id="struct-scol-layer" data-select-type="layer"></div></div>
               <div class="row-select compact"><label>콘크리트 벽체/슬라브</label><div class="smart-select compact-select" id="struct-cwall-layer" data-select-type="layer"></div></div>
@@ -802,12 +802,12 @@
       <div class="hero">
         <div class="pill">STEP 3 · AI 도면 생성</div>
         <h1>AI 도면 생성 (준비중)</h1>
-        <p>구독 결제 후 사용할 수 있는 기능입니다. 요구 사항을 알려주시면 반영하겠습니다.</p>
+        <p>구독 결제 후 사용할 수 있는 기능입니다.</p>
         <div id="generateLock" class="pill-lock" style="margin-top:8px;">구독 결제 시 활성화됩니다.</div>
-        <div class="actions-row" style="margin-top:12px;">
+        <!-- <div class="actions-row" style="margin-top:12px;">
           <button class="btn primary" id="btnSubscribe">구독하기</button>
           <button class="btn" id="btnNotify">알림받기</button>
-        </div>
+        </div> -->
       </div>
     </section>
   </main>
@@ -1288,7 +1288,7 @@
         "basic-dim-layer": { type: "layer", keys: ["DIM"] },
         "basic-symbol-layer": { type: "layer", keys: ["SYM"] },
         "basic-text-layer": { type: "layer", keys: ["TXT", "TEXT"] },
-        "struct-axis-layer": { type: "layer", keys: ["AXIS", "GRID"] },
+        "struct-axis-layer": { type: "layer", keys: ["AXIS", "GRID", "CEN"] },
         "struct-ccol-layer": { type: "layer", keys: ["COL"] },
         "struct-scol-layer": { type: "layer", keys: ["STL"] },
         "struct-cwall-layer": { type: "layer", keys: ["CON"] },
@@ -1424,7 +1424,8 @@
               : size.shape === "rect"
               ? `${Number(size.width || 0).toFixed(2)} × ${Number(size.height || 0).toFixed(2)}`
               : "-";
-          return `<tr><td>${col.type}</td><td>${sizeLabel}</td></tr>`;
+          const countLabel = typeof col.count === "number" ? col.count : 0;
+          return `<tr><td>${col.type}</td><td>${sizeLabel}</td><td>${countLabel}</td></tr>`;
         })
         .join("");
       view.innerHTML = `
@@ -1437,10 +1438,11 @@
               <tr>
                 <th style="text-align:left; padding:6px 4px; border-bottom:1px solid var(--border);">Type</th>
                 <th style="text-align:left; padding:6px 4px; border-bottom:1px solid var(--border);">Size</th>
+                <th style="text-align:left; padding:6px 4px; border-bottom:1px solid var(--border);">Count</th>
               </tr>
             </thead>
             <tbody>
-              ${columnRows || "<tr><td colspan='2' class='muted' style='padding:6px 4px;'>결과 없음</td></tr>"}
+              ${columnRows || "<tr><td colspan='3' class='muted' style='padding:6px 4px;'>결과 없음</td></tr>"}
             </tbody>
           </table>
         </div>
@@ -2052,17 +2054,21 @@
         });
       });
       $("btnDoSignup").onclick = () => doSignup($("signupId").value.trim(), $("signupPwd").value, $("signupPwd2").value);
-      $("btnSubscribe").onclick = () => {
-        if (!state.loggedIn) {
-          alert("로그인 후 구독할 수 있습니다.");
-          return setTab("login");
-        }
-        state.subscribed = true;
-        if (state.user) state.user.subscribed = true;
-        updateUserUI();
-        alert("구독이 활성화되었습니다.");
-      };
-      $("btnNotify").onclick = () => alert("준비되면 이메일로 안내해드리겠습니다.");
+      const btnSubscribe = $("btnSubscribe");
+      if (btnSubscribe) {
+        btnSubscribe.onclick = () => {
+          if (!state.loggedIn) {
+            alert("로그인 후 구독할 수 있습니다.");
+            return setTab("login");
+          }
+          state.subscribed = true;
+          if (state.user) state.user.subscribed = true;
+          updateUserUI();
+          alert("구독이 활성화되었습니다.");
+        };
+      }
+      const btnNotify = $("btnNotify");
+      if (btnNotify) btnNotify.onclick = () => alert("준비되면 이메일로 안내해드리겠습니다.");
       $("dropConvert").addEventListener("click", () => $("inputConvert").click());
       $("dropAnalyze").addEventListener("click", () => $("inputAnalyze").click());
       $("inputConvert").addEventListener("change", (e) => addFiles("convert", e.target.files));

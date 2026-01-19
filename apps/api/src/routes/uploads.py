@@ -419,12 +419,14 @@ async def get_semantic_summary(file_id: str, session: AsyncSession = Depends(get
             columns.append(props)
 
     column_types = {}
+    column_type_counts = {}
     for col in columns:
         ctype = col.get("column_type")
         size = col.get("size")
         if not ctype or not size:
             continue
         column_types.setdefault(ctype, size)
+        column_type_counts[ctype] = column_type_counts.get(ctype, 0) + 1
     return {
         "file_id": file_id,
         "border_count": len(borders),
@@ -432,7 +434,8 @@ async def get_semantic_summary(file_id: str, session: AsyncSession = Depends(get
         "axis_summaries": axis_summaries,
         "column_count": len(columns),
         "column_types": [
-            {"type": k, "size": v} for k, v in sorted(column_types.items(), key=lambda x: x[0])
+            {"type": k, "size": v, "count": column_type_counts.get(k, 0)}
+            for k, v in sorted(column_types.items(), key=lambda x: x[0])
         ],
     }
 
