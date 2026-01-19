@@ -336,9 +336,13 @@
     .row-select.compact { grid-template-columns: 130px 1fr; margin-bottom: 8px; }
     .config-columns {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 12px;
       margin-top: 12px;
+      width: 100%;
+    }
+    .config-columns > div {
+      min-width: 0;
     }
     .config-card {
       border: 1px solid var(--border);
@@ -1419,17 +1423,49 @@
       const view = $("aiResultView");
       const list = $("aiBorderList");
       if (!view) return;
-      const file = state.selectedResult;
+      const file = state.selectedResult || state.analyzeFiles[0];
       if (!file) {
         view.textContent = "분석 결과를 불러오는 중입니다...";
         return;
       }
-      const summary = file.semanticSummary || {};
-      const borders = Array.isArray(summary.borders) ? summary.borders : [];
-      const axis = Array.isArray(summary.axis_summaries) ? summary.axis_summaries : [];
-      const borderCount = summary.border_count ?? borders.length;
-      const borderItems = axis.length ? axis : borders.map((_, idx) => ({ border_index: idx + 1 }));
-      const selectedIdx = Math.min(Math.max(state.aiBorderIndex || 0, 0), Math.max(borderItems.length - 1, 0));
+      const entries = [];
+      state.analyzeFiles.forEach((f) => {
+        const sum = f.semanticSummary || {};
+        const axisItems = Array.isArray(sum.axis_summaries) ? sum.axis_summaries : [];
+        const borderItems = Array.isArray(sum.borders) ? sum.borders : [];
+        const borderByIndex = new Map();
+        borderItems.forEach((item, idx) => {
+          const key = item?.border_index || idx + 1;
+          borderByIndex.set(key, item);
+        });
+        if (axisItems.length) {
+          axisItems.forEach((item, idx) => {
+            const borderIdx = item.border_index || idx + 1;
+            entries.push({
+              file: f,
+              border_index: borderIdx,
+              axis_summary: item,
+              bbox: item.bbox,
+              bbox_world: item.bbox_world,
+              border: borderByIndex.get(borderIdx) || null,
+            });
+          });
+        } else if (borderItems.length) {
+          borderItems.forEach((item, idx) => {
+            entries.push({
+              file: f,
+              border_index: idx + 1,
+              border: item,
+              bbox_world: item.bbox_world,
+            });
+          });
+        }
+      });
+      if (!entries.length) {
+        view.textContent = "분석 결과를 불러오는 중입니다...";
+        return;
+      }
+      const selectedIdx = Math.min(Math.max(state.aiBorderIndex || 0, 0), Math.max(entries.length - 1, 0));
       state.aiBorderIndex = selectedIdx;
 
       const shortenName = (name, max = 22) => {
@@ -1441,13 +1477,14 @@
 
       if (list) {
         list.innerHTML = "";
-        borderItems.forEach((item, idx) => {
+        entries.forEach((item, idx) => {
           const btn = document.createElement("button");
           btn.className = "btn ghost";
           if (idx === selectedIdx) btn.classList.add("active");
-          const fileLabel = shortenName(file.name || "파일");
-          btn.textContent = `${fileLabel} / 도곽 ${item.border_index || idx + 1}`;
-          btn.title = `${file.name || "파일"} / 도곽 ${item.border_index || idx + 1}`;
+          const fileLabel = shortenName(item.file?.name || "파일");
+          const borderLabel = item.border_index || idx + 1;
+          btn.textContent = `${fileLabel} / 도곽 ${borderLabel}`;
+          btn.title = `${item.file?.name || "파일"} / 도곽 ${borderLabel}`;
           btn.onclick = () => {
             state.aiBorderIndex = idx;
             renderAiResultView();
@@ -1456,18 +1493,18 @@
         });
       }
 
-      const active = borderItems[selectedIdx] || {};
-      const xAxes = active.x_axes || [];
-      const yAxes = active.y_axes || [];
-      const xSpacing = active.x_spacing || [];
-      const ySpacing = active.y_spacing || [];
-      const borderBBox = (() => {
-        if (active?.bbox) return active.bbox;
-        if (active?.bbox_world) return active.bbox_world;
-        const fallbackIdx = typeof active.border_index === "number" ? active.border_index - 1 : selectedIdx;
-        const item = (summary.borders || [])[fallbackIdx];
-        return item?.bbox_world || null;
-      })();
+      const active = entries[selectedIdx] || {};
+      const axisSummary = active.axis_summary || {};
+      const xAxes = axisSummary.x_axes || [];
+      const yAxes = axisSummary.y_axes || [];
+      const xSpacing = axisSummary.x_spacing || [];
+      const ySpacing = axisSummary.y_spacing || [];
+      const borderBBox =
+        active.bbox ||
+        active.bbox_world ||
+        active.border?.bbox_world ||
+        null;
+      const activeFile = active.file || file;
 
       const formatAxisLine = (axes, spacing) => {
         if (!axes.length) return "없음";
@@ -1486,8 +1523,9 @@
         return parts.join("|");
       };
 
-      const columnTypes = Array.isArray(summary.column_types) ? summary.column_types : [];
-      const columnCount = typeof summary.column_count === "number" ? summary.column_count : 0;
+      const activeSummary = activeFile.semanticSummary || {};
+      const columnTypes = Array.isArray(activeSummary.column_types) ? activeSummary.column_types : [];
+      const columnCount = typeof activeSummary.column_count === "number" ? activeSummary.column_count : 0;
       const columnRows = columnTypes
         .map((col) => {
           const size = col.size || {};
@@ -1503,7 +1541,6 @@
         .join("");
       view.innerHTML = `
         <div class="card" style="margin-top:10px; background:var(--surface-2);">
-          <div style="font-weight:700; margin-bottom:6px;">DXF 미리보기</div>
           <div id="dxfPreview" class="preview-frame"></div>
         </div>
         <div class="card" style="margin-top:10px; background:var(--surface-2);">
@@ -1527,7 +1564,7 @@
           </table>
         </div>
       `;
-      renderDxfPreview(file, borderBBox);
+      renderDxfPreview(activeFile, borderBBox);
     }
 
     async function startParse() {
@@ -2471,10 +2508,10 @@
             console.warn("parse2 실패", f.fileId, err);
           }
         }
-        if (state.selectedResult) {
-          await refreshSemanticSummary(state.selectedResult).catch(() => {});
-          renderAiResultView();
+        for (const f of doneFiles) {
+          await refreshSemanticSummary(f).catch(() => {});
         }
+        renderAiResultView();
         if (state.selectedResult && !state.selectedResult.parsedData) {
           await loadParsed(state.selectedResult);
         }
