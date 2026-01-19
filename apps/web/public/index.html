@@ -793,7 +793,12 @@
       <div id="aiResultSection" class="layout" style="margin-top:16px; display:none;">
         <div class="card" style="grid-column: span 2;">
           <h3>AI 분석 결과</h3>
-          <div id="aiResultView" class="muted">결과가 준비되면 여기에 표시됩니다.</div>
+          <div class="tab-layout" style="margin-top:8px;">
+            <div class="tab-rail" id="aiBorderList"></div>
+            <div class="card" style="padding:12px; background: var(--surface-2);">
+              <div id="aiResultView" class="muted">결과가 준비되면 여기에 표시됩니다.</div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -805,7 +810,7 @@
         <p>구독 결제 후 사용할 수 있는 기능입니다.</p>
         <div id="generateLock" class="pill-lock" style="margin-top:8px;">구독 결제 시 활성화됩니다.</div>
         <!-- <div class="actions-row" style="margin-top:12px;">
-          <button class="btn primary" id="btnSubscribe">구독하기</button>
+          <button class="btn primary" id="btnSubscribe">구독하기</button>X
           <button class="btn" id="btnNotify">알림받기</button>
         </div> -->
       </div>
@@ -835,6 +840,7 @@
       layerOptions: [],
       blockOptions: [],
       templateFile: null,
+      aiBorderIndex: 0,
       viewerLib: null,
       viewerLoading: null,
       parserLib: null,
@@ -1386,6 +1392,7 @@
 
     function renderAiResultView() {
       const view = $("aiResultView");
+      const list = $("aiBorderList");
       if (!view) return;
       const file = state.selectedResult;
       if (!file || !file.semanticSummary) {
@@ -1396,23 +1403,54 @@
       const borders = Array.isArray(summary.borders) ? summary.borders : [];
       const axis = Array.isArray(summary.axis_summaries) ? summary.axis_summaries : [];
       const borderCount = summary.border_count ?? borders.length;
-      const axisItems = axis
-        .map((item, idx) => {
-          const xAxes = (item.x_axes || []).map((a) => `${a.label}(${a.coord?.toFixed?.(2) ?? a.coord})`).join(", ");
-          const yAxes = (item.y_axes || []).map((a) => `${a.label}(${a.coord?.toFixed?.(2) ?? a.coord})`).join(", ");
-          const xSpacing = (item.x_spacing || []).map((v) => (typeof v === "number" ? v.toFixed(2) : v)).join(", ");
-          const ySpacing = (item.y_spacing || []).map((v) => (typeof v === "number" ? v.toFixed(2) : v)).join(", ");
-          return `
-            <div class="card" style="margin-top:10px; background:var(--surface-2);">
-              <div style="font-weight:700;">도곽 ${item.border_index || idx + 1}</div>
-              <div class="muted" style="margin-top:4px;">X축선: ${xAxes || "없음"}</div>
-              <div class="muted">Y축선: ${yAxes || "없음"}</div>
-              <div class="muted">X축 간격: ${xSpacing || "없음"}</div>
-              <div class="muted">Y축 간격: ${ySpacing || "없음"}</div>
-            </div>
-          `;
-        })
-        .join("");
+      const borderItems = axis.length ? axis : borders.map((_, idx) => ({ border_index: idx + 1 }));
+      const selectedIdx = Math.min(Math.max(state.aiBorderIndex || 0, 0), Math.max(borderItems.length - 1, 0));
+      state.aiBorderIndex = selectedIdx;
+
+      const shortenName = (name, max = 22) => {
+        if (!name || name.length <= max) return name || "";
+        const head = Math.max(6, Math.floor(max * 0.55));
+        const tail = Math.max(4, max - head - 3);
+        return `${name.slice(0, head)}...${name.slice(name.length - tail)}`;
+      };
+
+      if (list) {
+        list.innerHTML = "";
+        borderItems.forEach((item, idx) => {
+          const btn = document.createElement("button");
+          btn.className = "btn ghost";
+          if (idx === selectedIdx) btn.classList.add("active");
+          const fileLabel = shortenName(file.name || "파일");
+          btn.textContent = `${fileLabel} / 도곽 ${item.border_index || idx + 1}`;
+          btn.title = `${file.name || "파일"} / 도곽 ${item.border_index || idx + 1}`;
+          btn.onclick = () => {
+            state.aiBorderIndex = idx;
+            renderAiResultView();
+          };
+          list.appendChild(btn);
+        });
+      }
+
+      const active = borderItems[selectedIdx] || {};
+      const xAxes = active.x_axes || [];
+      const yAxes = active.y_axes || [];
+      const xSpacing = active.x_spacing || [];
+      const ySpacing = active.y_spacing || [];
+
+      const formatAxisLine = (axes, spacing) => {
+        if (!axes.length) return "없음";
+        const parts = [];
+        axes.forEach((axisItem, idx) => {
+          const label = axisItem.label || `X${idx + 1}`;
+          parts.push(label);
+          if (idx < spacing.length) {
+            const dist = typeof spacing[idx] === "number" ? spacing[idx].toFixed(2) : spacing[idx];
+            parts.push(`←${dist}→`);
+          }
+        });
+        return parts.join("|");
+      };
+
       const columnTypes = Array.isArray(summary.column_types) ? summary.column_types : [];
       const columnCount = typeof summary.column_count === "number" ? summary.column_count : 0;
       const columnRows = columnTypes
@@ -1429,8 +1467,11 @@
         })
         .join("");
       view.innerHTML = `
-        <div style="font-weight:700;">도곽 인식: ${borderCount}개</div>
-        ${axisItems || "<div class='muted' style='margin-top:6px;'>축선 결과 없음</div>"}
+        <div class="card" style="margin-top:10px; background:var(--surface-2);">
+          <div style="font-weight:700;">축선</div>
+          <div class="muted" style="margin-top:4px;">X축: ${formatAxisLine(yAxes, ySpacing)}</div>
+          <div class="muted">Y축: ${formatAxisLine(xAxes, xSpacing)}</div>
+        </div>
         <div class="card" style="margin-top:12px; background:var(--surface-2);">
           <div style="font-weight:700; margin-bottom:6px;">기둥 일람표 (${columnCount}개)</div>
           <table style="width:100%; border-collapse: collapse;">
