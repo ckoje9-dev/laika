@@ -1,0 +1,18 @@
+"""Parser configuration from environment variables."""
+import os
+from pathlib import Path
+
+# Node.js binary path
+NODE_BIN = os.getenv("DXF_PARSER_NODE_BIN", "node")
+
+# DXF parser library path
+DXF_PARSER_LIB = Path(
+    os.getenv(
+        "DXF_PARSER_LIB",
+        # Default: apps/worker/src/lib/dxf-parser/commonjs/index.js
+        Path(__file__).resolve().parents[3] / "apps" / "worker" / "src" / "lib" / "dxf-parser" / "commonjs" / "index.js",
+    )
+)
+
+# Parsing timeout in seconds
+PARSE1_TIMEOUT = int(os.getenv("DXF_PARSER_TIMEOUT", "120"))
