@@ -1,6 +1,9 @@
 services:
   db:
-    image: postgis/postgis:15-3.3
+    build:
+      context: .
+      dockerfile: infra/docker/db/Dockerfile
+    image: laika/postgis-pgvector:15
     environment:
       POSTGRES_USER: laika
       POSTGRES_PASSWORD: laika

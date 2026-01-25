@@ -124,4 +124,14 @@ export async function startParse() {
   }
   if (btn) btn.disabled = false;
   if (btn) btn.classList.remove("is-loading");
+
+  // 파싱 완료 후 결과 섹션 표시
+  const doneFiles = state.analyzeFiles.filter((f) => f.status === "done");
+  if (doneFiles.length > 0) {
+    const resultSection = $("resultSection");
+    if (resultSection) resultSection.style.display = "grid";
+    if (!state.selectedResult) state.selectedResult = doneFiles[0];
+    updateResultList(true);
+    renderResultView();
+  }
 }

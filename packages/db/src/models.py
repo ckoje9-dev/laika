@@ -101,3 +101,30 @@ class QaHistory(Base):
     sources = mapped_column(JSONB, nullable=True)
     confidence: Mapped[Numeric | None] = mapped_column(Numeric)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=sa.text("now()"))
+
+
+class GenerationSession(Base):
+    """AI 도면 생성 세션 (대화 히스토리 추적)."""
+    __tablename__ = "generation_sessions"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, server_default=sa.text("uuid_generate_v4()"))
+    project_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    title: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, server_default=sa.text("'active'"), nullable=False)
+    conversation_history = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=sa.text("now()"))
+    updated_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=sa.text("now()"))
+
+
+class GenerationVersion(Base):
+    """생성된 도면 버전 (스키마 스냅샷)."""
+    __tablename__ = "generation_versions"
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("generation_sessions.id", ondelete="CASCADE"), nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    schema_json = mapped_column(JSONB, nullable=False)
+    validation_result = mapped_column(JSONB, nullable=True)
+    dxf_path: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=sa.text("now()"))

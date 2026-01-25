@@ -5,8 +5,8 @@ import os
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
-from langchain.vectorstores.pgvector import PGVector
-from langchain.embeddings.base import Embeddings
+from langchain_community.vectorstores import PGVector
+from langchain_core.embeddings import Embeddings
 from sqlalchemy.exc import SQLAlchemyError
 
 from .config import get_embeddings, MissingConfig

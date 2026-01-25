@@ -4,9 +4,9 @@ from __future__ import annotations
 import os
 from typing import Any, Mapping, Sequence
 
-from langchain.vectorstores.pgvector import PGVector
-from langchain.schema import Document
-from langchain.embeddings.base import Embeddings
+from langchain_community.vectorstores import PGVector
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 
 from .config import get_embeddings, MissingConfig
 

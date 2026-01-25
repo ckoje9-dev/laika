@@ -76,25 +76,11 @@ async def run(
         if not output_path:
             output_path = STORAGE_DERIVED_PATH / "generated.dxf"
 
-    # 3. LLM 프롬프트 기반 생성 (향후 구현)
+    # 3. LLM 프롬프트 기반 생성
     elif from_prompt:
         logger.info("프롬프트 기반 DXF 생성: %s", from_prompt[:50])
-        # TODO: LangChain을 통해 프롬프트 → 시맨틱 객체 변환
-        # 현재는 기본 템플릿 생성
-        generator.add_border(841, 594)  # A1 사이즈
-        generator.add_grid(
-            x_positions=[0, 7000, 14000, 21000],
-            y_positions=[0, 7000, 14000],
-            x_labels=["X1", "X2", "X3", "X4"],
-            y_labels=["Y1", "Y2", "Y3"],
-        )
-        # 기둥 위치 (그리드 교차점)
-        column_positions = [
-            (x, y)
-            for x in [0, 7000, 14000, 21000]
-            for y in [0, 7000, 14000]
-        ]
-        generator.add_columns(column_positions)
+        result = await run_ai_generation(from_prompt, output_path=output_path)
+        return result
 
         if not output_path:
             output_path = STORAGE_DERIVED_PATH / "prompt_generated.dxf"
@@ -178,3 +164,99 @@ async def generate_from_template(
     logger.info("템플릿 DXF 생성 완료: %s", output_path)
 
     return output_path
+
+
+async def run_ai_generation(
+    prompt: str,
+    project_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    context: Optional[str] = None,
+    output_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    AI 기반 도면 생성 파이프라인.
+
+    Args:
+        prompt: 사용자 요청
+        project_id: 프로젝트 ID (RAG 컨텍스트용)
+        session_id: 세션 ID (대화 기록용)
+        context: 추가 컨텍스트
+        output_path: 출력 경로
+
+    Returns:
+        생성 결과 (schema, validation, dxf_path)
+    """
+    from packages.generation.src.generator import DrawingGenerator
+
+    logger.info("AI 도면 생성 시작: %s", prompt[:50])
+
+    generator = DrawingGenerator()
+
+    # RAG 컨텍스트 로드 (project_id가 있으면)
+    rag_context = context
+    if project_id and not context:
+        try:
+            from packages.llm.src.retriever import get_retriever
+            retriever = get_retriever(project_id=project_id)
+            docs = retriever.get_relevant_documents(prompt)
+            if docs:
+                rag_context = "\n\n".join([doc.page_content for doc in docs[:3]])
+        except Exception as e:
+            logger.warning("RAG 컨텍스트 로드 실패: %s", e)
+
+    # 도면 생성
+    result = await generator.generate(
+        user_request=prompt,
+        context=rag_context,
+        output_path=Path(output_path) if output_path else None,
+    )
+
+    return {
+        "success": result.success,
+        "schema": result.schema.model_dump() if result.schema else None,
+        "validation": result.validation.to_dict() if result.validation else None,
+        "dxf_path": str(result.dxf_path) if result.dxf_path else None,
+        "error": result.error,
+    }
+
+
+async def run_ai_modification(
+    prompt: str,
+    current_schema: dict[str, Any],
+    output_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    AI 기반 도면 수정 파이프라인.
+
+    Args:
+        prompt: 수정 요청
+        current_schema: 현재 스키마 JSON
+        output_path: 출력 경로
+
+    Returns:
+        수정 결과 (schema, validation, dxf_path)
+    """
+    from packages.generation.src.generator import DrawingGenerator
+    from packages.generation.src.schema import DrawingSchema
+
+    logger.info("AI 도면 수정 시작: %s", prompt[:50])
+
+    generator = DrawingGenerator()
+
+    # 현재 스키마 파싱
+    schema = DrawingSchema.model_validate(current_schema)
+
+    # 도면 수정
+    result = await generator.modify(
+        user_request=prompt,
+        current_schema=schema,
+        output_path=Path(output_path) if output_path else None,
+    )
+
+    return {
+        "success": result.success,
+        "schema": result.schema.model_dump() if result.schema else None,
+        "validation": result.validation.to_dict() if result.validation else None,
+        "dxf_path": str(result.dxf_path) if result.dxf_path else None,
+        "error": result.error,
+    }

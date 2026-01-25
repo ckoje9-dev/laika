@@ -2,3 +2,4 @@
 
 from .uploads import convert_router, parsing_router  # noqa: F401
 from .queries import router as queries  # noqa: F401
+from .generation import router as generation  # noqa: F401

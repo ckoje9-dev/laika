@@ -10,9 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 try:
     # apps.api.src.routes.__init__에서 router 객체를 export함
-    from apps.api.src.routes import convert_router, parsing_router, queries  # type: ignore
+    from apps.api.src.routes import convert_router, parsing_router, queries, generation  # type: ignore
 except ModuleNotFoundError:
-    convert_router = parsing_router = queries = None  # type: ignore
+    convert_router = parsing_router = queries = generation = None  # type: ignore
 
 
 def create_app() -> FastAPI:
@@ -27,13 +27,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # convert/parsing/queries 라우터
+    # convert/parsing/queries/generation 라우터
     if convert_router:
         app.include_router(convert_router, prefix="/convert")
     if parsing_router:
         app.include_router(parsing_router, prefix="/parsing")
     if queries:
-        app.include_router(queries, prefix="/create/queries")
+        app.include_router(queries, prefix="/queries")
+    if generation:
+        app.include_router(generation, prefix="/generation")
 
     @app.get("/health", tags=["health"])
     def health():

@@ -43,6 +43,15 @@ async def run(file_id: Optional[str] = None, src: Optional[Path] = None, output_
         if file_id:
             await db_adapter.save_parse_results(file_id, out_path)
 
+            # Log success status
+            from packages.db.src.session import SessionLocal
+            async with SessionLocal() as session:
+                await session.execute(
+                    text("INSERT INTO conversion_logs (file_id, status, started_at, finished_at, message) VALUES (:file_id, 'done', now(), now(), :msg)"),
+                    {"file_id": file_id, "msg": "parse1 completed successfully"},
+                )
+                await session.commit()
+
         return out_path
 
     except Exception as e:

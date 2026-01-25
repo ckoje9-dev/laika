@@ -52,9 +52,9 @@ export function renderResultView() {
     view.innerHTML = '<div class="muted">파싱 결과를 보려면 파일을 선택하세요.</div>';
     return;
   }
-  if (!file.parsedData || !file.entitiesTable) {
+  if (!file.parsedData) {
     if (file.fileId) {
-      if (!file._loadingParsed && !file.parsedData) {
+      if (!file._loadingParsed) {
         file._loadingParsed = true;
         refreshParsedData(file)
           .catch(() => {})
@@ -63,18 +63,19 @@ export function renderResultView() {
             renderResultView();
           });
       }
-      if (!file._loadingEntities && !file.entitiesTable) {
-        file._loadingEntities = true;
-        refreshEntitiesTable(file)
-          .catch(() => {})
-          .finally(() => {
-            file._loadingEntities = false;
-            renderResultView();
-          });
-      }
     }
     view.innerHTML = '<div class="muted">파싱 결과를 불러오는 중입니다...</div>';
     return;
+  }
+  // entitiesTable은 선택적으로 로드 (없어도 기본 결과 표시)
+  if (!file.entitiesTable && !file._loadingEntities && !file._entitiesLoadFailed && file.fileId) {
+    file._loadingEntities = true;
+    refreshEntitiesTable(file)
+      .catch(() => { file._entitiesLoadFailed = true; })
+      .finally(() => {
+        file._loadingEntities = false;
+        renderResultView();
+      });
   }
   const data = file.parsedData;
   const layers = data.layers || [];
