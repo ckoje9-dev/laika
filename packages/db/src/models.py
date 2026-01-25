@@ -89,3 +89,15 @@ class SemanticObject(Base):
     geom = mapped_column(Geometry(geometry_type="GEOMETRY", srid=SRID_LOCAL_CAD), nullable=True)
     properties = mapped_column(JSONB, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=sa.text("now()"))
+
+
+class QaHistory(Base):
+    __tablename__ = "qa_history"
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    project_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    answer: Mapped[str | None] = mapped_column(Text)
+    sources = mapped_column(JSONB, nullable=True)
+    confidence: Mapped[Numeric | None] = mapped_column(Numeric)
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=sa.text("now()"))
