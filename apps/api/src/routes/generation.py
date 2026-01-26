@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from packages.db.src.session import SessionLocal
-from packages.db.src.models import GenerationSession, GenerationVersion, Project
+from packages.db.src.models import GenerationSession, GenerationVersion, Project, File, Version, DxfParseSection
 from packages.generation.src import DrawingSchema
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,7 @@ class GenerateRequest(BaseModel):
     project_id: str
     prompt: str
     session_id: Optional[str] = None
+    reference_file_ids: Optional[list[str]] = None
 
 
 class ModifyRequest(BaseModel):
@@ -111,6 +112,7 @@ async def generate_drawing(req: GenerateRequest) -> GenerateResponse:
                 prompt=req.prompt,
                 project_id=req.project_id,
                 session_id=str(gen_session.id) if gen_session else None,
+                reference_file_ids=req.reference_file_ids,
             )
             if not result.get("success"):
                 raise HTTPException(status_code=400, detail=result.get("error", "생성 실패"))
@@ -303,6 +305,41 @@ async def get_latest_version(session_id: str) -> dict:
             "dxf_path": latest.dxf_path,
             "created_at": latest.created_at.isoformat()
         }
+
+
+@router.get("/reference-files/{project_id}")
+async def list_reference_files(project_id: str) -> list[dict]:
+    """프로젝트에서 참조 가능한 파싱된 파일 목록 조회."""
+    async with SessionLocal() as session:
+        # 프로젝트 ID 해석
+        resolved_id = await _resolve_project_id(session, project_id)
+
+        # 프로젝트의 모든 파일 조회 (파싱 데이터가 있는 것만)
+        result = await session.execute(
+            select(File, Version)
+            .join(Version, File.version_id == Version.id)
+            .where(Version.project_id == resolved_id)
+            .order_by(File.created_at.desc())
+        )
+        rows = result.all()
+
+        files = []
+        for file, version in rows:
+            # dxf_parse_sections 존재 여부 확인
+            parse_section = await session.get(DxfParseSection, str(file.id))
+            has_parsed = parse_section is not None
+
+            files.append({
+                "file_id": str(file.id),
+                "type": file.type,
+                "version_label": version.label or "default",
+                "layer_count": file.layer_count or 0,
+                "entity_count": file.entity_count or 0,
+                "has_parsed": has_parsed,
+                "created_at": file.created_at.isoformat(),
+            })
+
+        return files
 
 
 @router.get("/download-dxf")

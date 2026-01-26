@@ -10,6 +10,8 @@ state.generateVersions = [];       // 버전 목록
 state.currentVersion = null;       // 현재 선택된 버전
 state.generateSessions = [];       // 세션 목록
 state.generateLoading = false;     // 로딩 상태
+state.referenceFiles = [];         // 참조 가능한 파일 목록
+state.selectedRefFileIds = [];     // 선택된 참조 파일 ID
 
 /**
  * 세션 목록 조회
@@ -48,6 +50,63 @@ export function renderSessionList() {
   // 이벤트 바인딩
   list.querySelectorAll('.session-item').forEach(btn => {
     btn.onclick = () => selectSession(btn.dataset.sessionId);
+  });
+}
+
+/**
+ * 참조 파일 목록 조회
+ */
+export async function loadReferenceFiles() {
+  const projectId = state.projectId || 'default';
+  try {
+    const files = await api(`/generation/reference-files/${projectId}`);
+    state.referenceFiles = (files || []).filter(f => f.has_parsed);
+    renderReferenceFiles();
+  } catch (err) {
+    console.warn('참조 파일 목록 조회 실패:', err);
+    state.referenceFiles = [];
+    renderReferenceFiles();
+  }
+}
+
+/**
+ * 참조 파일 목록 렌더링
+ */
+function renderReferenceFiles() {
+  const list = $('refFileList');
+  if (!list) return;
+
+  if (state.referenceFiles.length === 0) {
+    list.innerHTML = '<div class="muted">프로젝트의 파싱된 파일이 없습니다.</div>';
+    return;
+  }
+
+  list.innerHTML = state.referenceFiles.map(f => {
+    const checked = state.selectedRefFileIds.includes(f.file_id);
+    const shortId = f.file_id.slice(0, 8);
+    return `
+      <label class="ref-file-item ${checked ? 'selected' : ''}">
+        <input type="checkbox" value="${f.file_id}" ${checked ? 'checked' : ''} />
+        <span class="ref-file-info">
+          <span class="ref-file-id">${shortId}</span>
+          <span class="ref-file-meta">${f.type} · L${f.layer_count} · E${f.entity_count}</span>
+        </span>
+      </label>
+    `;
+  }).join('');
+
+  // 체크박스 이벤트
+  list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.onchange = () => {
+      if (cb.checked) {
+        if (!state.selectedRefFileIds.includes(cb.value)) {
+          state.selectedRefFileIds.push(cb.value);
+        }
+      } else {
+        state.selectedRefFileIds = state.selectedRefFileIds.filter(id => id !== cb.value);
+      }
+      renderReferenceFiles();
+    };
   });
 }
 
@@ -234,13 +293,17 @@ export async function startGenerate() {
 
   try {
     const projectId = state.projectId || 'default';
+    const body = {
+      project_id: projectId,
+      prompt: prompt,
+      session_id: state.generateSession?.id || null,
+    };
+    if (state.selectedRefFileIds.length > 0) {
+      body.reference_file_ids = state.selectedRefFileIds;
+    }
     const result = await api('/generation/generate', {
       method: 'POST',
-      body: {
-        project_id: projectId,
-        prompt: prompt,
-        session_id: state.generateSession?.id || null,
-      },
+      body,
     });
 
     // 상태 업데이트
@@ -472,6 +535,7 @@ export function initGenerateSection() {
     if (lock) lock.style.display = 'none';
     if (content) content.style.display = 'grid';
     loadSessions();
+    loadReferenceFiles();
   } else {
     if (lock) lock.style.display = 'block';
     if (content) content.style.display = 'none';

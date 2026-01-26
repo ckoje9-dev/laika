@@ -724,6 +724,47 @@
       padding-top: 4px;
       border-top: 1px solid var(--border);
     }
+    /* 참조 파일 선택 */
+    .ref-file-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .ref-file-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      font-size: 13px;
+    }
+    .ref-file-item:hover {
+      border-color: var(--accent);
+    }
+    .ref-file-item.selected {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+    }
+    .ref-file-item input[type="checkbox"] {
+      accent-color: var(--accent);
+    }
+    .ref-file-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .ref-file-id {
+      font-family: var(--mono);
+      font-weight: 600;
+    }
+    .ref-file-meta {
+      color: var(--muted);
+      font-size: 11px;
+    }
     /* 모달 */
     .modal-overlay {
       position: fixed;

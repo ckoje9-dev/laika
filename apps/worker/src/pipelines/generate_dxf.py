@@ -166,22 +166,127 @@ async def generate_from_template(
     return output_path
 
 
+async def _build_sql_context(
+    project_id: str,
+    reference_file_ids: Optional[list[str]] = None,
+) -> str:
+    """SQL DB에서 파싱된 도면 데이터를 조회하여 LLM 컨텍스트를 구성한다.
+
+    Args:
+        project_id: 프로젝트 ID (reference_file_ids가 없을 때 전체 파일 조회)
+        reference_file_ids: 특정 파일 ID 목록 (지정 시 해당 파일만 컨텍스트에 포함)
+    """
+    import json
+
+    parts = []
+
+    async with SessionLocal() as session:
+        from sqlalchemy import select as sa_select
+
+        if reference_file_ids:
+            # 지정된 파일 ID로 직접 조회
+            file_ids = reference_file_ids
+            for file_id in file_ids:
+                file = await session.get(models.File, file_id)
+                if file:
+                    parts.append(f"[참조 파일] id={file_id}, type={file.type}, layers={file.layer_count or 0}, entities={file.entity_count or 0}")
+        else:
+            # 프로젝트의 모든 파일 조회
+            versions_result = await session.execute(
+                sa_select(models.Version).where(models.Version.project_id == project_id)
+            )
+            versions = versions_result.scalars().all()
+
+            file_ids = []
+            for version in versions:
+                files_result = await session.execute(
+                    sa_select(models.File).where(models.File.version_id == version.id)
+                )
+                files = files_result.scalars().all()
+                for f in files:
+                    file_ids.append(str(f.id))
+                    parts.append(f"[파일] type={f.type}, layers={f.layer_count or 0}, entities={f.entity_count or 0}")
+
+        if not file_ids:
+            return ""
+
+        # 2. dxf_parse_sections에서 레이어/블록 구조 조회
+        for file_id in file_ids[:5]:  # 최대 5개 파일
+            sections = await session.get(models.DxfParseSection, file_id)
+            if not sections:
+                continue
+
+            # 레이어 목록
+            if sections.tables and isinstance(sections.tables, dict):
+                layer_dict = sections.tables.get("layer", {})
+                if isinstance(layer_dict, dict):
+                    layers = layer_dict.get("layers", {})
+                    if isinstance(layers, dict):
+                        layer_names = list(layers.keys())[:30]
+                        parts.append(f"[레이어 목록] {', '.join(layer_names)}")
+
+            # 블록 목록
+            if sections.blocks and isinstance(sections.blocks, dict):
+                block_names = list(sections.blocks.keys())[:20]
+                parts.append(f"[블록 목록] {', '.join(block_names)}")
+
+            # 엔티티 타입 분포
+            if sections.entities and isinstance(sections.entities, list):
+                type_counts = {}
+                for ent in sections.entities:
+                    if isinstance(ent, dict):
+                        t = ent.get("type", "unknown")
+                        type_counts[t] = type_counts.get(t, 0) + 1
+                type_summary = ", ".join(f"{k}:{v}" for k, v in sorted(type_counts.items(), key=lambda x: -x[1])[:10])
+                parts.append(f"[엔티티 분포] {type_summary}")
+
+        # 3. semantic_objects에서 시맨틱 정보 조회
+        for file_id in file_ids[:5]:
+            sem_result = await session.execute(
+                sa_select(models.SemanticObject).where(
+                    models.SemanticObject.file_id == file_id
+                )
+            )
+            sem_objects = sem_result.scalars().all()
+
+            if not sem_objects:
+                continue
+
+            by_kind = {}
+            for obj in sem_objects:
+                by_kind.setdefault(obj.kind, []).append(obj)
+
+            for kind, objs in by_kind.items():
+                props_sample = []
+                for obj in objs[:3]:  # 종류별 최대 3개 샘플
+                    if obj.properties and isinstance(obj.properties, dict):
+                        props_sample.append(obj.properties)
+
+                parts.append(f"[시맨틱 {kind}] 개수={len(objs)}")
+                if props_sample:
+                    parts.append(f"  샘플: {json.dumps(props_sample[:2], ensure_ascii=False, default=str)[:500]}")
+
+    return "\n".join(parts)
+
+
 async def run_ai_generation(
     prompt: str,
     project_id: Optional[str] = None,
     session_id: Optional[str] = None,
     context: Optional[str] = None,
     output_path: Optional[str] = None,
+    reference_file_ids: Optional[list[str]] = None,
 ) -> dict[str, Any]:
     """
     AI 기반 도면 생성 파이프라인.
 
     Args:
         prompt: 사용자 요청
-        project_id: 프로젝트 ID (RAG 컨텍스트용)
+        project_id: 프로젝트 ID (SQL DB 컨텍스트용)
         session_id: 세션 ID (대화 기록용)
         context: 추가 컨텍스트
         output_path: 출력 경로
+        reference_file_ids: 참조할 파일 ID 목록 (지정 시 해당 파일만 컨텍스트에 포함)
 
     Returns:
         생성 결과 (schema, validation, dxf_path)
@@ -192,22 +297,23 @@ async def run_ai_generation(
 
     generator = DrawingGenerator()
 
-    # RAG 컨텍스트 로드 (project_id가 있으면)
-    rag_context = context
-    if project_id and not context:
+    # SQL DB에서 파싱된 도면 데이터를 컨텍스트로 로드
+    sql_context = context
+    if not context and (project_id or reference_file_ids):
         try:
-            from packages.llm.src.retriever import get_retriever
-            retriever = get_retriever(project_id=project_id)
-            docs = retriever.get_relevant_documents(prompt)
-            if docs:
-                rag_context = "\n\n".join([doc.page_content for doc in docs[:3]])
+            sql_context = await _build_sql_context(
+                project_id or "",
+                reference_file_ids=reference_file_ids,
+            )
+            if sql_context:
+                logger.info("SQL 컨텍스트 로드 완료: %d자", len(sql_context))
         except Exception as e:
-            logger.warning("RAG 컨텍스트 로드 실패: %s", e)
+            logger.warning("SQL 컨텍스트 로드 실패: %s", e)
 
     # 도면 생성
     result = await generator.generate(
         user_request=prompt,
-        context=rag_context,
+        context=sql_context,
         output_path=Path(output_path) if output_path else None,
     )
 

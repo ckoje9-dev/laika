@@ -12,7 +12,7 @@ import { initSmartSelects, applyTemplateSelections, setLoadParsedFn } from './sm
 import { updateResultList, renderResultView, renderAiResultView } from './results.js';
 import {
   startGenerate, modifyDrawing, newSession, downloadDxf, convertToDwg,
-  showSchemaDetail, initGenerateSection
+  showSchemaDetail, initGenerateSection, loadReferenceFiles
 } from './generate.js';
 
 // Wire up circular dependency
@@ -202,6 +202,9 @@ function bindEvents() {
 
   const btnShowSchema = $("btnShowSchema");
   if (btnShowSchema) btnShowSchema.onclick = showSchemaDetail;
+
+  const btnRefreshRefFiles = $("btnRefreshRefFiles");
+  if (btnRefreshRefFiles) btnRefreshRefFiles.onclick = loadReferenceFiles;
 
   // Enter키로 생성
   const generatePrompt = $("generatePrompt");
