@@ -141,11 +141,35 @@ export function renderResultView() {
     </tr>`;
   }).join("");
 
+  const layerRows = layers.map((l, i) => {
+    const name = l.name || l.layer || l;
+    return `<tr><td>${i + 1}</td><td>${name}</td></tr>`;
+  }).join("");
+
+  const blockRows = blocks.map((b, i) => {
+    const name = b.name || b.block_name || b;
+    return `<tr><td>${i + 1}</td><td>${name}</td></tr>`;
+  }).join("");
+
   view.innerHTML = `
     <div class="stats-row">
       <div class="stat"><span class="stat-label">레이어</span><span class="stat-value">${layers.length}</span></div>
       <div class="stat"><span class="stat-label">블록</span><span class="stat-value">${blocks.length}</span></div>
       <div class="stat"><span class="stat-label">엔티티</span><span class="stat-value">${totalEntitiesLabel}</span></div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">
+      <div class="table-wrapper" style="max-height:240px; overflow:auto;">
+        <table class="entity-table">
+          <thead><tr><th>#</th><th>레이어</th></tr></thead>
+          <tbody>${layerRows || '<tr><td colspan="2" class="muted">레이어 없음</td></tr>'}</tbody>
+        </table>
+      </div>
+      <div class="table-wrapper" style="max-height:240px; overflow:auto;">
+        <table class="entity-table">
+          <thead><tr><th>#</th><th>블록</th></tr></thead>
+          <tbody>${blockRows || '<tr><td colspan="2" class="muted">블록 없음</td></tr>'}</tbody>
+        </table>
+      </div>
     </div>
     <div class="table-wrapper" style="margin-top:12px; max-height:300px; overflow:auto;">
       <table class="entity-table">

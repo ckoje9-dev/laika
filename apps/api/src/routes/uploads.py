@@ -373,15 +373,52 @@ async def get_entities_table(file_id: str, session: AsyncSession = Depends(get_s
     file_row = await session.get(db_models.File, file_id)
     if not file_row:
         raise HTTPException(status_code=404, detail="file not found")
-    csv_path = _ensure_entities_csv(file_row)
-    if not csv_path or not csv_path.exists():
+
+    # 1차: 파일 시스템의 CSV 시도
+    try:
+        csv_path = _ensure_entities_csv(file_row)
+        if csv_path and csv_path.exists():
+            rows, columns = _load_entities_csv(csv_path)
+            return {
+                "file_id": file_id,
+                "rows": rows,
+                "columns": columns,
+                "csv_path": str(csv_path),
+            }
+    except Exception:
+        pass  # 파일 기반 실패 시 DB fallback
+
+    # 2차: DB의 dxf_parse_sections.entities에서 직접 생성
+    sections_row = await session.get(db_models.DxfParseSection, file_id)
+    if not sections_row:
         raise HTTPException(status_code=404, detail="entities table not ready")
-    rows, columns = _load_entities_csv(csv_path)
+
+    entities = sections_row.entities if isinstance(sections_row.entities, list) else []
+    if not entities:
+        return {"file_id": file_id, "rows": [], "columns": [], "csv_path": None}
+
+    all_keys: set[str] = set()
+    for ent in entities:
+        if isinstance(ent, dict):
+            all_keys.update(ent.keys())
+    columns = ["handle"] + sorted(k for k in all_keys if k != "handle")
+    rows = []
+    for ent in entities:
+        if not isinstance(ent, dict):
+            continue
+        row = {}
+        for key in columns:
+            value = ent.get(key)
+            if isinstance(value, (dict, list)):
+                row[key] = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+            else:
+                row[key] = value
+        rows.append(row)
     return {
         "file_id": file_id,
         "rows": rows,
         "columns": columns,
-        "csv_path": str(csv_path),
+        "csv_path": None,
     }
 
 

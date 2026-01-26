@@ -21,10 +21,14 @@ router = APIRouter(tags=["generation"])
 
 async def _resolve_project_id(session, project_id_or_name: str) -> str:
     """프로젝트 ID 또는 이름으로 프로젝트를 찾고, 없으면 생성한다."""
-    # UUID로 직접 조회
-    project = await session.get(Project, project_id_or_name)
-    if project:
-        return str(project.id)
+    # UUID로 직접 조회 (유효한 UUID일 때만)
+    try:
+        UUID(project_id_or_name)
+        project = await session.get(Project, project_id_or_name)
+        if project:
+            return str(project.id)
+    except (ValueError, AttributeError):
+        pass
 
     # 이름으로 조회
     result = await session.execute(
@@ -329,8 +333,13 @@ async def list_reference_files(project_id: str) -> list[dict]:
             parse_section = await session.get(DxfParseSection, str(file.id))
             has_parsed = parse_section is not None
 
+            # 파일명 추출
+            raw_path = file.path_dxf or file.path_original or ""
+            filename = Path(raw_path).name if raw_path else f"file-{str(file.id)[:8]}"
+
             files.append({
                 "file_id": str(file.id),
+                "filename": filename,
                 "type": file.type,
                 "version_label": version.label or "default",
                 "layer_count": file.layer_count or 0,

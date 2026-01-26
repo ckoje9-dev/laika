@@ -47,7 +47,7 @@ async def run(file_id: Optional[str] = None, src: Optional[Path] = None, output_
             from packages.db.src.session import SessionLocal
             async with SessionLocal() as session:
                 await session.execute(
-                    text("INSERT INTO conversion_logs (file_id, status, started_at, finished_at, message) VALUES (:file_id, 'done', now(), now(), :msg)"),
+                    text("INSERT INTO conversion_logs (file_id, status, started_at, finished_at, message) VALUES (:file_id, 'success', now(), now(), :msg)"),
                     {"file_id": file_id, "msg": "parse1 completed successfully"},
                 )
                 await session.commit()

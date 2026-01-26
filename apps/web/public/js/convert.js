@@ -55,8 +55,11 @@ export async function pollStatus(file, mode) {
           renderFileList(file.kind);
           return resolve(false);
         }
-        const isDone = st === "done" || st === "completed" || st === "success" || res.path_dxf || res.path_original;
-        if (isDone && (mode !== "convert" || res.path_dxf)) {
+        const statusDone = st === "done" || st === "completed" || st === "success";
+        const isDone = mode === "convert"
+          ? (statusDone || res.path_dxf) && res.path_dxf
+          : statusDone;
+        if (isDone) {
           file.status = "done";
           file.statusLabel = statusCopy.done;
           file.progress = 100;

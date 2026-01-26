@@ -83,12 +83,12 @@ function renderReferenceFiles() {
 
   list.innerHTML = state.referenceFiles.map(f => {
     const checked = state.selectedRefFileIds.includes(f.file_id);
-    const shortId = f.file_id.slice(0, 8);
+    const displayName = f.filename || f.file_id.slice(0, 8);
     return `
       <label class="ref-file-item ${checked ? 'selected' : ''}">
         <input type="checkbox" value="${f.file_id}" ${checked ? 'checked' : ''} />
         <span class="ref-file-info">
-          <span class="ref-file-id">${shortId}</span>
+          <span class="ref-file-id">${displayName}</span>
           <span class="ref-file-meta">${f.type} · L${f.layer_count} · E${f.entity_count}</span>
         </span>
       </label>
