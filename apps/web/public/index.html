@@ -251,9 +251,60 @@
     <section id="generate">
       <div class="hero">
         <div class="pill">STEP 3 · AI 도면 생성</div>
-        <h1>AI 도면 생성 (준비중)</h1>
-        <p>구독 결제 후 사용할 수 있는 기능입니다.</p>
+        <h1>AI 도면 생성</h1>
+        <p>자연어로 도면을 생성하고 수정하세요.</p>
         <div id="generateLock" class="pill-lock" style="margin-top:8px;">구독 결제 시 활성화됩니다.</div>
+      </div>
+
+      <div id="generateContent" class="layout" style="display:none;">
+        <!-- 세션 관리 영역 -->
+        <div class="card" style="grid-column: span 2;">
+          <div class="generate-header">
+            <h3>세션</h3>
+            <button class="btn ghost" id="btnNewSession">새 세션</button>
+          </div>
+          <div class="session-list" id="generateSessionList">
+            <div class="muted">저장된 세션이 없습니다.</div>
+          </div>
+        </div>
+
+        <!-- 메인 작업 영역 -->
+        <div class="card generate-workspace" style="grid-column: span 2;">
+          <div class="generate-split">
+            <!-- 좌측: 대화 히스토리 -->
+            <div class="generate-history-panel">
+              <h4>대화 기록</h4>
+              <div class="chat-history" id="generateHistory">
+                <div class="muted">새 도면을 생성해보세요.</div>
+              </div>
+            </div>
+
+            <!-- 우측: 미리보기 -->
+            <div class="generate-preview-panel">
+              <h4>미리보기</h4>
+              <div class="generate-preview" id="generatePreview">
+                <div class="muted" style="display:flex; align-items:center; justify-content:center; height:100%;">도면이 생성되면 여기에 표시됩니다.</div>
+              </div>
+              <div class="version-list" id="generateVersionList"></div>
+            </div>
+          </div>
+
+          <!-- 프롬프트 입력 -->
+          <div class="generate-input-area">
+            <textarea class="input generate-prompt" id="generatePrompt" placeholder="예: 7m x 7m 그리드로 4x3 기둥 배치를 생성해줘" rows="2"></textarea>
+            <div class="generate-actions">
+              <button class="btn primary" id="btnGenerate">생성하기 <span class="throbber" aria-hidden="true"></span></button>
+              <button class="btn" id="btnModify">수정하기 <span class="throbber" aria-hidden="true"></span></button>
+            </div>
+          </div>
+
+          <!-- 다운로드 영역 -->
+          <div class="generate-download">
+            <button class="btn ghost" id="btnShowSchema">스키마 보기</button>
+            <button class="btn" id="btnDownloadDxf">DXF 다운로드</button>
+            <button class="btn" id="btnConvertDwg">DWG 변환 <span class="throbber" aria-hidden="true"></span></button>
+          </div>
+        </div>
       </div>
     </section>
   </main>

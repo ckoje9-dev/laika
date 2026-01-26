@@ -22,6 +22,7 @@ export function setTab(tab) {
   document.querySelectorAll("section").forEach((sec) => sec.classList.toggle("active", sec.id === tab));
   if ($("analyzeLock")) $("analyzeLock").style.display = state.loggedIn ? "none" : "inline-flex";
   if ($("generateLock")) $("generateLock").style.display = state.subscribed ? "none" : "inline-flex";
+  if ($("generateContent")) $("generateContent").style.display = state.subscribed ? "grid" : "none";
 }
 
 export function setDetailTab(tab) {

@@ -10,6 +10,10 @@ import { startConvert, updateConvertModeUI } from './convert.js';
 import { startParse, loadParsed, loadEntitiesTable, refreshSemanticSummary } from './parse.js';
 import { initSmartSelects, applyTemplateSelections, setLoadParsedFn } from './smart-select.js';
 import { updateResultList, renderResultView, renderAiResultView } from './results.js';
+import {
+  startGenerate, modifyDrawing, newSession, downloadDxf, convertToDwg,
+  showSchemaDetail, initGenerateSection
+} from './generate.js';
 
 // Wire up circular dependency
 setLoadParsedFn(loadParsed);
@@ -179,6 +183,40 @@ function bindEvents() {
   document.querySelectorAll("[data-detail-tab]").forEach((btn) =>
     btn.addEventListener("click", () => setDetailTab(btn.dataset.detailTab))
   );
+
+  // AI 도면 생성
+  const btnGenerate = $("btnGenerate");
+  if (btnGenerate) btnGenerate.onclick = startGenerate;
+
+  const btnModify = $("btnModify");
+  if (btnModify) btnModify.onclick = modifyDrawing;
+
+  const btnNewSession = $("btnNewSession");
+  if (btnNewSession) btnNewSession.onclick = newSession;
+
+  const btnDownloadDxf = $("btnDownloadDxf");
+  if (btnDownloadDxf) btnDownloadDxf.onclick = downloadDxf;
+
+  const btnConvertDwg = $("btnConvertDwg");
+  if (btnConvertDwg) btnConvertDwg.onclick = convertToDwg;
+
+  const btnShowSchema = $("btnShowSchema");
+  if (btnShowSchema) btnShowSchema.onclick = showSchemaDetail;
+
+  // Enter키로 생성
+  const generatePrompt = $("generatePrompt");
+  if (generatePrompt) {
+    generatePrompt.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        if (state.generateSession?.id) {
+          modifyDrawing();
+        } else {
+          startGenerate();
+        }
+      }
+    });
+  }
 }
 
 // 초기화
@@ -186,3 +224,4 @@ setTab("home");
 updateUserUI();
 bindEvents();
 updateConvertModeUI();
+initGenerateSection();

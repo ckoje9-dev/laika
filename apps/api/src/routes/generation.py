@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -15,6 +17,28 @@ from packages.generation.src import DrawingSchema
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["generation"])
+
+
+async def _resolve_project_id(session, project_id_or_name: str) -> str:
+    """프로젝트 ID 또는 이름으로 프로젝트를 찾고, 없으면 생성한다."""
+    # UUID로 직접 조회
+    project = await session.get(Project, project_id_or_name)
+    if project:
+        return str(project.id)
+
+    # 이름으로 조회
+    result = await session.execute(
+        select(Project).where(Project.name == project_id_or_name)
+    )
+    project = result.scalar_one_or_none()
+    if project:
+        return str(project.id)
+
+    # 없으면 생성
+    project = Project(name=project_id_or_name)
+    session.add(project)
+    await session.flush()
+    return str(project.id)
 
 
 class GenerateRequest(BaseModel):
@@ -53,10 +77,8 @@ class SessionResponse(BaseModel):
 async def generate_drawing(req: GenerateRequest) -> GenerateResponse:
     """새 도면 생성 또는 기존 세션에서 생성."""
     async with SessionLocal() as session:
-        # 프로젝트 존재 확인
-        project = await session.get(Project, req.project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+        # 프로젝트 조회 또는 생성
+        project_id = await _resolve_project_id(session, req.project_id)
 
         # 세션 생성 또는 조회
         if req.session_id:
@@ -65,7 +87,7 @@ async def generate_drawing(req: GenerateRequest) -> GenerateResponse:
                 raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
         else:
             gen_session = GenerationSession(
-                project_id=req.project_id,
+                project_id=project_id,
                 title=req.prompt[:50] if req.prompt else "새 도면",
                 status="active",
                 conversation_history=[]
@@ -281,3 +303,73 @@ async def get_latest_version(session_id: str) -> dict:
             "dxf_path": latest.dxf_path,
             "created_at": latest.created_at.isoformat()
         }
+
+
+@router.get("/download-dxf")
+async def download_dxf(path: str):
+    """생성된 DXF 파일 다운로드."""
+    file_path = Path(path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+    return FileResponse(
+        file_path,
+        media_type="application/dxf",
+        filename=file_path.name,
+    )
+
+
+class ConvertToDwgRequest(BaseModel):
+    dxf_path: str
+
+
+@router.post("/convert-to-dwg")
+async def convert_to_dwg(req: ConvertToDwgRequest):
+    """DXF를 DWG로 변환."""
+    import subprocess
+    import os
+
+    dxf_path = Path(req.dxf_path)
+    if not dxf_path.exists():
+        raise HTTPException(status_code=404, detail="DXF 파일을 찾을 수 없습니다.")
+
+    dwg_path = dxf_path.with_suffix(".dwg")
+
+    # ODA File Converter 사용
+    oda_path = os.getenv("ODA_CONVERTER_PATH", "/usr/bin/ODAFileConverter")
+    if not Path(oda_path).exists():
+        raise HTTPException(status_code=500, detail="ODA File Converter가 설치되어 있지 않습니다.")
+
+    input_dir = str(dxf_path.parent)
+    output_dir = str(dwg_path.parent)
+
+    try:
+        subprocess.run(
+            [oda_path, input_dir, output_dir, "ACAD2018", "DWG", "0", "1", dxf_path.name],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = exc.stderr or exc.stdout or "DWG 변환 실패"
+        raise HTTPException(status_code=500, detail=detail)
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="DWG 변환 시간 초과")
+
+    if not dwg_path.exists():
+        raise HTTPException(status_code=500, detail="DWG 파일 생성 실패")
+
+    return {"dwg_path": str(dwg_path)}
+
+
+@router.get("/download-dwg")
+async def download_dwg(path: str):
+    """DWG 파일 다운로드."""
+    file_path = Path(path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+    return FileResponse(
+        file_path,
+        media_type="application/octet-stream",
+        filename=file_path.name,
+    )
