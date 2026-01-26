@@ -9,8 +9,7 @@ NODE_BIN = os.getenv("DXF_PARSER_NODE_BIN", "node")
 DXF_PARSER_LIB = Path(
     os.getenv(
         "DXF_PARSER_LIB",
-        # Default: apps/worker/src/lib/dxf-parser/commonjs/index.js
-        Path(__file__).resolve().parents[3] / "apps" / "worker" / "src" / "lib" / "dxf-parser" / "commonjs" / "index.js",
+        Path(__file__).resolve().parents[3] / "apps" / "worker" / "src" / "lib" / "node_modules" / "dxf-parser" / "dist" / "dxf-parser.js",
     )
 )
 

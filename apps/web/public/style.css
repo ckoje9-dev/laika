@@ -455,7 +455,16 @@
       background: var(--surface-2);
     }
     .table-wrap.sticky-table th { white-space: nowrap; }
-    .table-wrap.sticky-table th.sortable { cursor: pointer; }
+    .table-wrap.sticky-table th.sortable { cursor: pointer; user-select: none; }
+    .table-wrap.sticky-table th.sortable:hover { background: rgba(255,255,255,0.06); }
+    .color-patch {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      border: 1px solid rgba(255,255,255,0.18);
+      vertical-align: middle;
+    }
     .sort-arrow {
       font-size: 10px;
       opacity: 0.65;

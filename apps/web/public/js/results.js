@@ -83,29 +83,81 @@ export function renderResultView() {
   const totalEntities =
     typeof file.entityHandleCount === "number"
       ? file.entityHandleCount
-      : file.entityTableView && Array.isArray(file.entityTableView.rows)
-      ? file.entityTableView.rows.length
       : typeof data.total === "number"
       ? data.total
       : Array.isArray(data.entities)
       ? data.entities.length
-      : Array.isArray(data.entity_table)
-      ? data.entity_table.length
       : 0;
-  const totalEntitiesLabel = Number(totalEntities || 0).toLocaleString("en-US");
+  const fmt = (n) => Number(n || 0).toLocaleString("en-US");
+
+  // --- Sort state ---
+  if (!file._sort) file._sort = {};
+  const sortRows = (rows, key) => {
+    const s = file._sort[key];
+    if (!s || !s.col) return rows;
+    const { col, dir } = s;
+    return [...rows].sort((a, b) => {
+      let va = a[col] ?? "", vb = b[col] ?? "";
+      if (typeof va === "number" && typeof vb === "number") return dir === "asc" ? va - vb : vb - va;
+      return dir === "asc"
+        ? String(va).localeCompare(String(vb), undefined, { numeric: true })
+        : String(vb).localeCompare(String(va), undefined, { numeric: true });
+    });
+  };
+  const sortArrow = (key, col) => {
+    const s = file._sort[key];
+    if (s && s.col === col) return `<span class="sort-arrow">${s.dir === "asc" ? "\u25B2" : "\u25BC"}</span>`;
+    return `<span class="sort-arrow muted">\u25B2</span>`;
+  };
+
+  // --- ACI color index → CSS color ---
+  const ACI = {1:"#FF0000",2:"#FFFF00",3:"#00FF00",4:"#00FFFF",5:"#0000FF",6:"#FF00FF",7:"#FFFFFF",8:"#808080",9:"#C0C0C0",10:"#FF0000",30:"#FF7F00",40:"#FFBF00",50:"#BFFF00",70:"#00FF7F",90:"#007FFF",130:"#7F00FF",170:"#FF007F",200:"#BF7F7F",250:"#505050"};
+  const aciColor = (idx) => ACI[idx] || null;
+  const colorPatch = (idx) => {
+    const c = aciColor(idx);
+    if (c) return `<span class="color-patch" style="background:${c};"></span>`;
+    if (idx === 0) return `<span class="muted" style="font-size:11px;">BYBLOCK</span>`;
+    if (idx === 256) return `<span class="muted" style="font-size:11px;">BYLAYER</span>`;
+    return `<span class="color-patch" style="background:hsl(${(idx * 137) % 360},60%,50%);"></span>`;
+  };
+
+  // === 레이어 TABLE ===
+  const layerData = layers.map((l) => ({
+    name: l.name || l.layer || String(l),
+    colorIndex: typeof l.colorIndex === "number" ? l.colorIndex : 0,
+    visible: l.visible !== false,
+    frozen: l.frozen === true,
+  }));
+  const sortedLayers = sortRows(layerData, "layers");
+  const layerRows = sortedLayers.map((l) => `<tr>
+    <td>${l.name}</td>
+    <td style="text-align:center;">${colorPatch(l.colorIndex)}</td>
+    <td style="text-align:center;">${l.visible ? "\u2713" : "-"}</td>
+    <td style="text-align:center;">${l.frozen ? "\u2713" : "-"}</td>
+  </tr>`).join("");
+
+  // === 블록 TABLE ===
+  const blockData = blocks.map((b) => ({
+    name: b.name || b.block_name || String(b),
+    count: typeof b.count === "number" ? b.count : 0,
+  }));
+  const sortedBlocks = sortRows(blockData, "blocks");
+  const blockRows = sortedBlocks.map((b) => `<tr>
+    <td>${b.name}</td>
+    <td style="text-align:right;">${fmt(b.count)}</td>
+  </tr>`).join("");
+
+  // === 엔티티 TABLE ===
   const entitiesTable = Array.isArray(file.entitiesTable) ? file.entitiesTable : [];
   const entitiesColumns = Array.isArray(file.entitiesTableColumns) ? file.entitiesTableColumns : [];
-  const sourceRows = entitiesTable.length ? entitiesTable.slice(0, 50) : [];
-
-  const visibleColumns = ["handle", "type", "layer", "coord_x", "coord_y", "coord_z", "text", "name", "radius", "actualMeasurement"];
-  const coordColumns = new Set(["vertices", "startpoint", "endpoint", "center", "position"].map(v => v.toLowerCase()));
+  const sourceRows = entitiesTable.length ? entitiesTable.slice(0, 200) : [];
+  const coordColumns = new Set(["vertices","startpoint","endpoint","center","position"].map(v => v.toLowerCase()));
   const columnMap = new Map((entitiesColumns.length ? entitiesColumns : Object.keys(sourceRows[0] || {})).map(c => [String(c).toLowerCase(), c]));
 
   const formatCoord = (value) => {
     const num = typeof value === "number" ? value : 0;
     return (Math.round(num * 10000) / 10000).toFixed(4);
   };
-
   const extractCoords = (row) => {
     for (const key of coordColumns) {
       const actualKey = columnMap.get(key) || key;
@@ -114,70 +166,84 @@ export function renderResultView() {
       if (typeof raw === "string" && (raw.startsWith("{") || raw.startsWith("["))) {
         try { raw = JSON.parse(raw); } catch { continue; }
       }
-      if (Array.isArray(raw) && raw[0]) {
-        return { x: raw[0].x || 0, y: raw[0].y || 0, z: raw[0].z || 0 };
-      }
-      if (raw && typeof raw === "object") {
-        return { x: raw.x || 0, y: raw.y || 0, z: raw.z || 0 };
-      }
+      if (Array.isArray(raw) && raw[0]) return { x: raw[0].x || 0, y: raw[0].y || 0, z: raw[0].z || 0 };
+      if (raw && typeof raw === "object") return { x: raw.x || 0, y: raw.y || 0, z: raw.z || 0 };
     }
     return null;
   };
-
-  const headerCells = visibleColumns.map(c => `<th>${c === "actualMeasurement" ? "dim" : c}</th>`).join("");
-  const entityRows = sourceRows.map(row => {
+  const sortedEntities = sortRows(sourceRows, "entities");
+  const entityRows = sortedEntities.map((row) => {
     const coord = extractCoords(row);
     return `<tr>
-      <td>${row.handle || "-"}</td>
-      <td>${row.type || "-"}</td>
-      <td>${row.layer || "-"}</td>
-      <td>${coord ? formatCoord(coord.x) : "-"}</td>
-      <td>${coord ? formatCoord(coord.y) : "-"}</td>
-      <td>${coord ? formatCoord(coord.z) : "-"}</td>
-      <td>${row.text || "-"}</td>
-      <td>${row.name || "-"}</td>
-      <td>${row.radius ? formatCoord(row.radius) : "-"}</td>
-      <td>${row.actualMeasurement ? formatCoord(row.actualMeasurement) : "-"}</td>
+      <td class="col-handle">${row.handle || "-"}</td>
+      <td class="col-type">${row.type || "-"}</td>
+      <td class="col-layer">${row.layer || "-"}</td>
+      <td class="col-coord">${coord ? formatCoord(coord.x) : "-"}</td>
+      <td class="col-coord">${coord ? formatCoord(coord.y) : "-"}</td>
+      <td class="col-coord">${coord ? formatCoord(coord.z) : "-"}</td>
+      <td class="col-text">${row.text || "-"}</td>
+      <td class="col-name">${row.name || "-"}</td>
+      <td class="col-radius">${row.radius ? formatCoord(row.radius) : "-"}</td>
+      <td class="col-dim">${row.actualMeasurement ? formatCoord(row.actualMeasurement) : "-"}</td>
     </tr>`;
   }).join("");
 
-  const layerRows = layers.map((l, i) => {
-    const name = l.name || l.layer || l;
-    return `<tr><td>${i + 1}</td><td>${name}</td></tr>`;
-  }).join("");
-
-  const blockRows = blocks.map((b, i) => {
-    const name = b.name || b.block_name || b;
-    return `<tr><td>${i + 1}</td><td>${name}</td></tr>`;
-  }).join("");
-
   view.innerHTML = `
-    <div class="stats-row">
-      <div class="stat"><span class="stat-label">레이어</span><span class="stat-value">${layers.length}</span></div>
-      <div class="stat"><span class="stat-label">블록</span><span class="stat-value">${blocks.length}</span></div>
-      <div class="stat"><span class="stat-label">엔티티</span><span class="stat-value">${totalEntitiesLabel}</span></div>
-    </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">
-      <div class="table-wrapper" style="max-height:240px; overflow:auto;">
-        <table class="entity-table">
-          <thead><tr><th>#</th><th>레이어</th></tr></thead>
-          <tbody>${layerRows || '<tr><td colspan="2" class="muted">레이어 없음</td></tr>'}</tbody>
+    <div style="margin-top:12px;">
+      <div style="font-weight:700; margin-bottom:6px;">레이어 TABLE <span class="muted" style="font-weight:400;">(총 ${fmt(layers.length)} layers)</span></div>
+      <div class="table-wrap sticky-table" style="max-height:260px;">
+        <table>
+          <thead><tr>
+            <th class="sortable" data-tbl="layers" data-col="name">layer_name ${sortArrow("layers","name")}</th>
+            <th style="width:80px; text-align:center;">colorIndex</th>
+            <th style="width:60px; text-align:center;">visible</th>
+            <th style="width:60px; text-align:center;">frozen</th>
+          </tr></thead>
+          <tbody>${layerRows || '<tr><td colspan="4" class="muted">레이어 없음</td></tr>'}</tbody>
         </table>
       </div>
-      <div class="table-wrapper" style="max-height:240px; overflow:auto;">
-        <table class="entity-table">
-          <thead><tr><th>#</th><th>블록</th></tr></thead>
+    </div>
+    <div style="margin-top:16px;">
+      <div style="font-weight:700; margin-bottom:6px;">블록 TABLE <span class="muted" style="font-weight:400;">(총 ${fmt(blocks.length)} blocks)</span></div>
+      <div class="table-wrap sticky-table" style="max-height:260px;">
+        <table>
+          <thead><tr>
+            <th class="sortable" data-tbl="blocks" data-col="name">block_name ${sortArrow("blocks","name")}</th>
+            <th class="sortable" data-tbl="blocks" data-col="count" style="width:100px; text-align:right;">block_cnt ${sortArrow("blocks","count")}</th>
+          </tr></thead>
           <tbody>${blockRows || '<tr><td colspan="2" class="muted">블록 없음</td></tr>'}</tbody>
         </table>
       </div>
     </div>
-    <div class="table-wrapper" style="margin-top:12px; max-height:300px; overflow:auto;">
-      <table class="entity-table">
-        <thead><tr>${headerCells}</tr></thead>
-        <tbody>${entityRows || '<tr><td colspan="10" class="muted">엔티티 없음</td></tr>'}</tbody>
-      </table>
+    <div style="margin-top:16px;">
+      <div style="font-weight:700; margin-bottom:6px;">엔티티 TABLE <span class="muted" style="font-weight:400;">(총 ${fmt(totalEntities)} entities)</span></div>
+      <div class="table-wrap sticky-table" style="max-height:360px;">
+        <table>
+          <thead><tr>
+            <th class="sortable col-handle" data-tbl="entities" data-col="handle">handle ${sortArrow("entities","handle")}</th>
+            <th class="sortable col-type" data-tbl="entities" data-col="type">type ${sortArrow("entities","type")}</th>
+            <th class="sortable col-layer" data-tbl="entities" data-col="layer">layer_name ${sortArrow("entities","layer")}</th>
+            <th class="col-coord">x</th><th class="col-coord">y</th><th class="col-coord">z</th>
+            <th class="col-text">text</th><th class="col-name">name</th>
+            <th class="col-radius">radius</th><th class="col-dim">dim</th>
+          </tr></thead>
+          <tbody>${entityRows || '<tr><td colspan="10" class="muted">엔티티 없음</td></tr>'}</tbody>
+        </table>
+      </div>
     </div>
   `;
+  // 정렬 클릭 핸들러
+  view.querySelectorAll("th.sortable").forEach((th) => {
+    th.onclick = () => {
+      const tbl = th.dataset.tbl;
+      const col = th.dataset.col;
+      const cur = file._sort[tbl];
+      file._sort[tbl] = cur && cur.col === col
+        ? { col, dir: cur.dir === "asc" ? "desc" : "asc" }
+        : { col, dir: "asc" };
+      renderResultView();
+    };
+  });
 }
 
 export function renderAiResultView() {

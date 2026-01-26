@@ -310,13 +310,30 @@ async def get_parsed_preview(
     blocks: list[dict] = []
     sections_row = await session.get(db_models.DxfParseSection, file_id)
 
-    # dxf_parse_sections: sections.tables.layer.layers / sections.blocks 의 key만 사용
+    # dxf_parse_sections에서 레이어(속성 포함)와 블록(INSERT 카운트) 추출
     if sections_row:
         tables = sections_row.tables if isinstance(sections_row.tables, dict) else {}
         layer_dict = tables.get("layer", {}).get("layers") if isinstance(tables.get("layer"), dict) else None
-        layers = [{"name": k} for k in layer_dict.keys() if k] if isinstance(layer_dict, dict) else []
+        if isinstance(layer_dict, dict):
+            for k, v in layer_dict.items():
+                if not k:
+                    continue
+                info: dict = {"name": k}
+                if isinstance(v, dict):
+                    info["colorIndex"] = v.get("colorIndex") or v.get("color") or 0
+                    info["visible"] = v.get("visible", True)
+                    info["frozen"] = v.get("frozen", False)
+                layers.append(info)
+
         block_dict = sections_row.blocks if isinstance(sections_row.blocks, dict) else {}
-        blocks = [{"name": k} for k in block_dict.keys() if k]
+        all_ents = sections_row.entities if isinstance(sections_row.entities, list) else []
+        block_insert_counts: dict[str, int] = {}
+        for ent in all_ents:
+            if isinstance(ent, dict) and str(ent.get("type", "")).upper() == "INSERT":
+                bname = ent.get("name") or ent.get("block_name")
+                if bname:
+                    block_insert_counts[bname] = block_insert_counts.get(bname, 0) + 1
+        blocks = [{"name": k, "count": block_insert_counts.get(k, 0)} for k in block_dict.keys() if k]
 
     # dxf_parse_sections를 유일한 소스로 사용
 

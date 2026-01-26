@@ -3,7 +3,9 @@
     "allow": [
       "Bash(docker compose exec:*)",
       "Bash(docker compose:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(npm --version:*)",
+      "Bash(node:*)"
     ]
   }
 }

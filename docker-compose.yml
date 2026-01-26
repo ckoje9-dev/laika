@@ -37,7 +37,7 @@ services:
       context: .
       dockerfile: infra/docker/api/Dockerfile
     env_file:
-      - config/env/.env.example
+      - config/env/.env
     environment:
       DATABASE_URL: postgresql+psycopg://laika:laika@db:5432/laika
       VECTOR_STORE_URL: postgresql+psycopg://laika:laika@db:5432/laika
@@ -76,7 +76,7 @@ services:
       context: .
       dockerfile: infra/docker/api/Dockerfile
     env_file:
-      - config/env/.env.example
+      - config/env/.env
     environment:
       DATABASE_URL: postgresql+psycopg://laika:laika@db:5432/laika
       VECTOR_STORE_URL: postgresql+psycopg://laika:laika@db:5432/laika
