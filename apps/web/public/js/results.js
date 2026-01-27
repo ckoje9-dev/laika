@@ -140,7 +140,7 @@ export function renderResultView() {
   const blockData = blocks.map((b) => ({
     name: b.name || b.block_name || String(b),
     count: typeof b.count === "number" ? b.count : 0,
-  }));
+  })).filter((b) => !b.name.startsWith("*"));
   const sortedBlocks = sortRows(blockData, "blocks");
   const blockRows = sortedBlocks.map((b) => `<tr>
     <td>${b.name}</td>
@@ -189,30 +189,32 @@ export function renderResultView() {
   }).join("");
 
   view.innerHTML = `
-    <div style="margin-top:12px;">
-      <div style="font-weight:700; margin-bottom:6px;">레이어 TABLE <span class="muted" style="font-weight:400;">(총 ${fmt(layers.length)} layers)</span></div>
-      <div class="table-wrap sticky-table" style="max-height:260px;">
-        <table>
-          <thead><tr>
-            <th class="sortable" data-tbl="layers" data-col="name">layer_name ${sortArrow("layers","name")}</th>
-            <th style="width:80px; text-align:center;">colorIndex</th>
-            <th style="width:60px; text-align:center;">visible</th>
-            <th style="width:60px; text-align:center;">frozen</th>
-          </tr></thead>
-          <tbody>${layerRows || '<tr><td colspan="4" class="muted">레이어 없음</td></tr>'}</tbody>
-        </table>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">
+      <div>
+        <div style="font-weight:700; margin-bottom:6px;">레이어 TABLE <span class="muted" style="font-weight:400;">(총 ${fmt(layers.length)} layers)</span></div>
+        <div class="table-wrap sticky-table" style="max-height:260px;">
+          <table>
+            <thead><tr>
+              <th class="sortable" data-tbl="layers" data-col="name">layer_name ${sortArrow("layers","name")}</th>
+              <th style="width:80px; text-align:center;">colorIndex</th>
+              <th style="width:60px; text-align:center;">visible</th>
+              <th style="width:60px; text-align:center;">frozen</th>
+            </tr></thead>
+            <tbody>${layerRows || '<tr><td colspan="4" class="muted">레이어 없음</td></tr>'}</tbody>
+          </table>
+        </div>
       </div>
-    </div>
-    <div style="margin-top:16px;">
-      <div style="font-weight:700; margin-bottom:6px;">블록 TABLE <span class="muted" style="font-weight:400;">(총 ${fmt(blocks.length)} blocks)</span></div>
-      <div class="table-wrap sticky-table" style="max-height:260px;">
-        <table>
-          <thead><tr>
-            <th class="sortable" data-tbl="blocks" data-col="name">block_name ${sortArrow("blocks","name")}</th>
-            <th class="sortable" data-tbl="blocks" data-col="count" style="width:100px; text-align:right;">block_cnt ${sortArrow("blocks","count")}</th>
-          </tr></thead>
-          <tbody>${blockRows || '<tr><td colspan="2" class="muted">블록 없음</td></tr>'}</tbody>
-        </table>
+      <div>
+        <div style="font-weight:700; margin-bottom:6px;">블록 TABLE <span class="muted" style="font-weight:400;">(총 ${fmt(blockData.length)} blocks)</span></div>
+        <div class="table-wrap sticky-table" style="max-height:260px;">
+          <table>
+            <thead><tr>
+              <th class="sortable" data-tbl="blocks" data-col="name">block_name ${sortArrow("blocks","name")}</th>
+              <th class="sortable" data-tbl="blocks" data-col="count" style="width:100px; text-align:right;">block_cnt ${sortArrow("blocks","count")}</th>
+            </tr></thead>
+            <tbody>${blockRows || '<tr><td colspan="2" class="muted">블록 없음</td></tr>'}</tbody>
+          </table>
+        </div>
       </div>
     </div>
     <div style="margin-top:16px;">
