@@ -730,8 +730,25 @@
       display: flex;
       gap: 8px;
       justify-content: flex-end;
-      padding-top: 4px;
+      padding-top: 8px;
       border-top: 1px solid var(--border);
+      align-items: center;
+    }
+    .template-select-wrap {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 8px;
+      margin-right: auto;
+    }
+    .template-select-wrap label {
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .template-select-wrap select {
+      font-size: 13px;
+      padding: 4px 8px;
     }
     /* 참조 파일 선택 */
     .ref-file-list {

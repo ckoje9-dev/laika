@@ -272,48 +272,67 @@ async def _build_sql_context(
 async def run_ai_generation(
     prompt: str,
     project_id: Optional[str] = None,
-    session_id: Optional[str] = None,
-    context: Optional[str] = None,
+    template_data: Optional[dict[str, Any]] = None,
+    conversation_history: Optional[list[dict]] = None,
     output_path: Optional[str] = None,
-    reference_file_ids: Optional[list[str]] = None,
 ) -> dict[str, Any]:
     """
     AI 기반 도면 생성 파이프라인.
 
     Args:
         prompt: 사용자 요청
-        project_id: 프로젝트 ID (SQL DB 컨텍스트용)
-        session_id: 세션 ID (대화 기록용)
-        context: 추가 컨텍스트
+        project_id: 프로젝트 ID
+        template_data: 템플릿 파일의 파싱 데이터 (선택적)
+        conversation_history: 대화 히스토리
         output_path: 출력 경로
-        reference_file_ids: 참조할 파일 ID 목록 (지정 시 해당 파일만 컨텍스트에 포함)
 
     Returns:
-        생성 결과 (schema, validation, dxf_path)
+        생성 결과 (schema, validation, dxf_path, message)
     """
+    import json
     from packages.generation.src.generator import DrawingGenerator
 
     logger.info("AI 도면 생성 시작: %s", prompt[:50])
 
     generator = DrawingGenerator()
 
-    # SQL DB에서 파싱된 도면 데이터를 컨텍스트로 로드
-    sql_context = context
-    if not context and (project_id or reference_file_ids):
-        try:
-            sql_context = await _build_sql_context(
-                project_id or "",
-                reference_file_ids=reference_file_ids,
-            )
-            if sql_context:
-                logger.info("SQL 컨텍스트 로드 완료: %d자", len(sql_context))
-        except Exception as e:
-            logger.warning("SQL 컨텍스트 로드 실패: %s", e)
+    # 템플릿 데이터가 있으면 컨텍스트로 구성
+    context = None
+    if template_data:
+        parts = []
+        parts.append(f"[템플릿 파일] file_id={template_data.get('file_id')}")
+
+        # 레이어 정보
+        layers = template_data.get("layers", {})
+        if layers:
+            layer_names = list(layers.keys())[:30] if isinstance(layers, dict) else []
+            parts.append(f"[레이어 목록] {', '.join(layer_names)}")
+
+        # 블록 정보
+        blocks = template_data.get("blocks", {})
+        if blocks:
+            block_names = [k for k in blocks.keys() if not k.startswith("*")][:20]
+            parts.append(f"[블록 목록] {', '.join(block_names)}")
+
+        # 엔티티 샘플
+        entities = template_data.get("entities_sample", [])
+        if entities:
+            type_counts = {}
+            for ent in entities:
+                if isinstance(ent, dict):
+                    t = ent.get("type", "unknown")
+                    type_counts[t] = type_counts.get(t, 0) + 1
+            type_summary = ", ".join(f"{k}:{v}" for k, v in sorted(type_counts.items(), key=lambda x: -x[1])[:10])
+            parts.append(f"[엔티티 분포 (샘플)] {type_summary}")
+
+        context = "\n".join(parts)
+        logger.info("템플릿 컨텍스트 구성 완료: %d자", len(context))
 
     # 도면 생성
     result = await generator.generate(
         user_request=prompt,
-        context=sql_context,
+        context=context,
+        conversation_history=conversation_history or [],
         output_path=Path(output_path) if output_path else None,
     )
 
@@ -322,6 +341,7 @@ async def run_ai_generation(
         "schema": result.schema.model_dump() if result.schema else None,
         "validation": result.validation.to_dict() if result.validation else None,
         "dxf_path": str(result.dxf_path) if result.dxf_path else None,
+        "message": "도면을 생성했습니다." if result.success else result.error,
         "error": result.error,
     }
 

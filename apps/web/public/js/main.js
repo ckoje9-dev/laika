@@ -11,8 +11,8 @@ import { startParse, loadParsed, loadEntitiesTable, refreshSemanticSummary } fro
 import { initSmartSelects, applyTemplateSelections, setLoadParsedFn } from './smart-select.js';
 import { updateResultList, renderResultView, renderAiResultView } from './results.js';
 import {
-  startGenerate, modifyDrawing, newSession, downloadDxf, convertToDwg,
-  showSchemaDetail, initGenerateSection, loadReferenceFiles
+  startGenerate, downloadDxf, convertToDwg,
+  showSchemaDetail, initGenerateSection
 } from './generate.js';
 
 // Wire up circular dependency
@@ -188,12 +188,6 @@ function bindEvents() {
   const btnGenerate = $("btnGenerate");
   if (btnGenerate) btnGenerate.onclick = startGenerate;
 
-  const btnModify = $("btnModify");
-  if (btnModify) btnModify.onclick = modifyDrawing;
-
-  const btnNewSession = $("btnNewSession");
-  if (btnNewSession) btnNewSession.onclick = newSession;
-
   const btnDownloadDxf = $("btnDownloadDxf");
   if (btnDownloadDxf) btnDownloadDxf.onclick = downloadDxf;
 
@@ -203,20 +197,13 @@ function bindEvents() {
   const btnShowSchema = $("btnShowSchema");
   if (btnShowSchema) btnShowSchema.onclick = showSchemaDetail;
 
-  const btnRefreshRefFiles = $("btnRefreshRefFiles");
-  if (btnRefreshRefFiles) btnRefreshRefFiles.onclick = loadReferenceFiles;
-
   // Enter키로 생성
   const generatePrompt = $("generatePrompt");
   if (generatePrompt) {
     generatePrompt.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        if (state.generateSession?.id) {
-          modifyDrawing();
-        } else {
-          startGenerate();
-        }
+        startGenerate();
       }
     });
   }

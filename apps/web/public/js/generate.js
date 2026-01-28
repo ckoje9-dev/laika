@@ -4,162 +4,54 @@
 import { state, $, API_BASE } from './state.js';
 import { api } from './api.js';
 
-// 생성 관련 상태 확장
-state.generateSession = null;      // 현재 세션
-state.generateVersions = [];       // 버전 목록
-state.currentVersion = null;       // 현재 선택된 버전
-state.generateSessions = [];       // 세션 목록
-state.generateLoading = false;     // 로딩 상태
-state.referenceFiles = [];         // 참조 가능한 파일 목록
-state.selectedRefFileIds = [];     // 선택된 참조 파일 ID
+// 생성 관련 상태
+state.generateLoading = false;
+state.templateFiles = [];         // 템플릿 파일 목록
+state.selectedTemplateId = null;  // 선택된 템플릿 파일 ID
+state.conversationHistory = [];   // 대화 히스토리
+state.currentSchema = null;       // 현재 스키마
+state.currentDxfPath = null;      // 현재 DXF 경로
 
 /**
- * 세션 목록 조회
+ * 템플릿 파일 목록 조회
  */
-export async function loadSessions() {
-  const projectId = state.projectId || 'default';
-  try {
-    const sessions = await api(`/generation/sessions/${projectId}`);
-    state.generateSessions = sessions || [];
-    renderSessionList();
-  } catch (err) {
-    console.warn('세션 목록 조회 실패:', err);
-    state.generateSessions = [];
-  }
-}
-
-/**
- * 세션 목록 렌더링
- */
-export function renderSessionList() {
-  const list = $('generateSessionList');
-  if (!list) return;
-
-  if (state.generateSessions.length === 0) {
-    list.innerHTML = '<div class="muted">저장된 세션이 없습니다.</div>';
-    return;
-  }
-
-  list.innerHTML = state.generateSessions.map(s => `
-    <button class="btn ghost session-item ${state.generateSession?.id === s.id ? 'active' : ''}" data-session-id="${s.id}">
-      <span class="session-title">${s.title || '제목 없음'}</span>
-      <span class="session-meta">v${s.version_count} · ${new Date(s.created_at).toLocaleDateString()}</span>
-    </button>
-  `).join('');
-
-  // 이벤트 바인딩
-  list.querySelectorAll('.session-item').forEach(btn => {
-    btn.onclick = () => selectSession(btn.dataset.sessionId);
-  });
-}
-
-/**
- * 참조 파일 목록 조회
- */
-export async function loadReferenceFiles() {
+export async function loadTemplateFiles() {
   const projectId = state.projectId || 'default';
   try {
     const files = await api(`/generation/reference-files/${projectId}`);
-    state.referenceFiles = (files || []).filter(f => f.has_parsed);
-    renderReferenceFiles();
+    state.templateFiles = (files || []).filter(f => f.has_parsed);
+    renderTemplateSelect();
   } catch (err) {
-    console.warn('참조 파일 목록 조회 실패:', err);
-    state.referenceFiles = [];
-    renderReferenceFiles();
+    console.warn('템플릿 파일 목록 조회 실패:', err);
+    state.templateFiles = [];
+    renderTemplateSelect();
   }
 }
 
 /**
- * 참조 파일 목록 렌더링
+ * 템플릿 드롭다운 렌더링
  */
-function renderReferenceFiles() {
-  const list = $('refFileList');
-  if (!list) return;
+function renderTemplateSelect() {
+  const select = $('templateSelect');
+  if (!select) return;
 
-  if (state.referenceFiles.length === 0) {
-    list.innerHTML = '<div class="muted">프로젝트의 파싱된 파일이 없습니다.</div>';
-    return;
-  }
+  // 옵션 초기화
+  select.innerHTML = '<option value="">선택 파일 없음</option>';
 
-  list.innerHTML = state.referenceFiles.map(f => {
-    const checked = state.selectedRefFileIds.includes(f.file_id);
-    const displayName = f.filename || f.file_id.slice(0, 8);
-    return `
-      <label class="ref-file-item ${checked ? 'selected' : ''}">
-        <input type="checkbox" value="${f.file_id}" ${checked ? 'checked' : ''} />
-        <span class="ref-file-info">
-          <span class="ref-file-id">${displayName}</span>
-          <span class="ref-file-meta">${f.type} · L${f.layer_count} · E${f.entity_count}</span>
-        </span>
-      </label>
-    `;
-  }).join('');
-
-  // 체크박스 이벤트
-  list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-    cb.onchange = () => {
-      if (cb.checked) {
-        if (!state.selectedRefFileIds.includes(cb.value)) {
-          state.selectedRefFileIds.push(cb.value);
-        }
-      } else {
-        state.selectedRefFileIds = state.selectedRefFileIds.filter(id => id !== cb.value);
-      }
-      renderReferenceFiles();
-    };
-  });
-}
-
-/**
- * 세션 선택
- */
-export async function selectSession(sessionId) {
-  try {
-    const versions = await api(`/generation/session/${sessionId}/versions`);
-    state.generateVersions = versions || [];
-    state.generateSession = state.generateSessions.find(s => s.id === sessionId) || { id: sessionId };
-
-    if (versions.length > 0) {
-      state.currentVersion = versions[versions.length - 1]; // 최신 버전
+  state.templateFiles.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f.file_id;
+    opt.textContent = f.filename || f.file_id.slice(0, 8);
+    if (state.selectedTemplateId === f.file_id) {
+      opt.selected = true;
     }
-
-    renderSessionList();
-    renderVersionList();
-    renderConversationHistory();
-    renderGeneratePreview();
-  } catch (err) {
-    console.error('세션 로드 실패:', err);
-    alert('세션을 불러오는데 실패했습니다.');
-  }
-}
-
-/**
- * 버전 목록 렌더링
- */
-export function renderVersionList() {
-  const list = $('generateVersionList');
-  if (!list) return;
-
-  if (state.generateVersions.length === 0) {
-    list.innerHTML = '';
-    return;
-  }
-
-  list.innerHTML = state.generateVersions.map(v => `
-    <button class="btn ghost version-item ${state.currentVersion?.version_number === v.version_number ? 'active' : ''}" data-version="${v.version_number}">
-      v${v.version_number}
-    </button>
-  `).join('');
+    select.appendChild(opt);
+  });
 
   // 이벤트 바인딩
-  list.querySelectorAll('.version-item').forEach(btn => {
-    btn.onclick = () => {
-      const vNum = parseInt(btn.dataset.version);
-      state.currentVersion = state.generateVersions.find(v => v.version_number === vNum);
-      renderVersionList();
-      renderGeneratePreview();
-    };
-  });
+  select.onchange = () => {
+    state.selectedTemplateId = select.value || null;
+  };
 }
 
 /**
@@ -169,32 +61,20 @@ export function renderConversationHistory() {
   const container = $('generateHistory');
   if (!container) return;
 
-  if (!state.generateSession?.conversation_history || state.generateSession.conversation_history.length === 0) {
-    // 버전에서 히스토리 구성
-    if (state.generateVersions.length > 0) {
-      const messages = [];
-      state.generateVersions.forEach(v => {
-        messages.push({ role: 'user', content: v.prompt });
-        messages.push({ role: 'assistant', content: `도면을 ${v.version_number === 1 ? '생성' : '수정'}했습니다. (버전 ${v.version_number})` });
-      });
-      container.innerHTML = messages.map(m => `
-        <div class="chat-message ${m.role}">
-          <span class="chat-role">${m.role === 'user' ? '사용자' : 'AI'}</span>
-          <span class="chat-content">${m.content}</span>
-        </div>
-      `).join('');
-    } else {
-      container.innerHTML = '<div class="muted">새 도면을 생성해보세요.</div>';
-    }
+  if (state.conversationHistory.length === 0) {
+    container.innerHTML = '<div class="muted">새 도면을 생성해보세요.</div>';
     return;
   }
 
-  container.innerHTML = state.generateSession.conversation_history.map(m => `
+  container.innerHTML = state.conversationHistory.map(m => `
     <div class="chat-message ${m.role}">
       <span class="chat-role">${m.role === 'user' ? '사용자' : 'AI'}</span>
       <span class="chat-content">${m.content}</span>
     </div>
   `).join('');
+
+  // 스크롤 맨 아래로
+  container.scrollTop = container.scrollHeight;
 }
 
 /**
@@ -204,23 +84,14 @@ export function renderGeneratePreview() {
   const container = $('generatePreview');
   if (!container) return;
 
-  if (!state.currentVersion?.dxf_path) {
+  if (!state.currentDxfPath) {
     container.innerHTML = '<div class="muted" style="display:flex; align-items:center; justify-content:center; height:100%;">도면이 생성되면 여기에 표시됩니다.</div>';
     return;
   }
 
   // DXF 뷰어 렌더링
   container.innerHTML = '<div id="generateDxfPreview" class="preview-frame"></div>';
-
-  // 뷰어용 가상 파일 객체 생성
-  const virtualFile = {
-    fileId: 'generated',
-    dxfPath: state.currentVersion.dxf_path,
-    _dxfContent: null,
-  };
-
-  // DXF 파일 로드 후 렌더링
-  loadAndRenderDxf(state.currentVersion.dxf_path);
+  loadAndRenderDxf(state.currentDxfPath);
 }
 
 /**
@@ -231,21 +102,14 @@ async function loadAndRenderDxf(dxfPath) {
   if (!previewContainer) return;
 
   try {
-    // DXF 파일 경로에서 직접 로드
     const response = await fetch(`${API_BASE}/static/${dxfPath.replace(/^.*[\\\/]/, '')}`);
     if (!response.ok) {
-      // 파일 ID 기반 다운로드 시도
-      const fileId = state.currentVersion?.file_id;
-      if (fileId) {
-        window.open(`${API_BASE}/generation/download/${fileId}`, '_blank');
-      }
       previewContainer.innerHTML = '<div class="muted">미리보기를 로드할 수 없습니다.</div>';
       return;
     }
 
     const dxfContent = await response.text();
 
-    // three-dxf로 렌더링
     if (window.ThreeDxf && window.DxfParser) {
       const parser = new window.DxfParser();
       const dxf = parser.parseSync(dxfContent);
@@ -263,7 +127,7 @@ async function loadAndRenderDxf(dxfPath) {
 }
 
 /**
- * 새 도면 생성
+ * 도면 생성
  */
 export async function startGenerate() {
   const input = $('generatePrompt');
@@ -291,46 +155,42 @@ export async function startGenerate() {
   }
   state.generateLoading = true;
 
+  // 대화에 사용자 메시지 추가
+  state.conversationHistory.push({ role: 'user', content: prompt });
+  renderConversationHistory();
+
   try {
     const projectId = state.projectId || 'default';
     const body = {
       project_id: projectId,
       prompt: prompt,
-      session_id: state.generateSession?.id || null,
+      conversation_history: state.conversationHistory.slice(0, -1), // 현재 메시지 제외한 히스토리
     };
-    if (state.selectedRefFileIds.length > 0) {
-      body.reference_file_ids = state.selectedRefFileIds;
+
+    // 템플릿이 선택되어 있으면 추가
+    if (state.selectedTemplateId) {
+      body.template_file_id = state.selectedTemplateId;
     }
+
     const result = await api('/generation/generate', {
       method: 'POST',
       body,
     });
 
     // 상태 업데이트
-    if (!state.generateSession || state.generateSession.id !== result.session_id) {
-      state.generateSession = {
-        id: result.session_id,
-        title: prompt.slice(0, 50),
-      };
-    }
+    state.currentSchema = result.schema;
+    state.currentDxfPath = result.dxf_path;
 
-    // 버전 추가
-    state.generateVersions.push({
-      version_number: result.version_number,
-      prompt: prompt,
-      schema: result.schema,
-      validation: result.validation,
-      dxf_path: result.dxf_path,
-      created_at: new Date().toISOString(),
+    // AI 응답 추가
+    state.conversationHistory.push({
+      role: 'assistant',
+      content: result.message || '도면을 생성했습니다.'
     });
-    state.currentVersion = state.generateVersions[state.generateVersions.length - 1];
 
     // UI 업데이트
     input.value = '';
-    renderVersionList();
     renderConversationHistory();
     renderGeneratePreview();
-    loadSessions(); // 세션 목록 새로고침
 
     // 검증 결과 표시
     if (result.validation && !result.validation.valid) {
@@ -340,6 +200,9 @@ export async function startGenerate() {
 
   } catch (err) {
     console.error('도면 생성 실패:', err);
+    // 실패 시 사용자 메시지 제거
+    state.conversationHistory.pop();
+    renderConversationHistory();
     alert(err.message || '도면 생성에 실패했습니다.');
   } finally {
     if (btn) {
@@ -351,75 +214,12 @@ export async function startGenerate() {
 }
 
 /**
- * 도면 수정
+ * 대화 초기화
  */
-export async function modifyDrawing() {
-  const input = $('generatePrompt');
-  const prompt = input?.value?.trim();
-
-  if (!prompt) {
-    alert('수정할 내용을 입력해주세요.');
-    return;
-  }
-
-  if (!state.generateSession?.id) {
-    // 세션이 없으면 새로 생성
-    return startGenerate();
-  }
-
-  const btn = $('btnModify');
-  if (btn) {
-    btn.disabled = true;
-    btn.classList.add('is-loading');
-  }
-
-  try {
-    const result = await api('/generation/modify', {
-      method: 'POST',
-      body: {
-        session_id: state.generateSession.id,
-        prompt: prompt,
-      },
-    });
-
-    // 버전 추가
-    state.generateVersions.push({
-      version_number: result.version_number,
-      prompt: prompt,
-      schema: result.schema,
-      validation: result.validation,
-      dxf_path: result.dxf_path,
-      created_at: new Date().toISOString(),
-    });
-    state.currentVersion = state.generateVersions[state.generateVersions.length - 1];
-
-    // UI 업데이트
-    input.value = '';
-    renderVersionList();
-    renderConversationHistory();
-    renderGeneratePreview();
-
-  } catch (err) {
-    console.error('도면 수정 실패:', err);
-    alert(err.message || '도면 수정에 실패했습니다.');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.classList.remove('is-loading');
-    }
-  }
-}
-
-/**
- * 새 세션 시작
- */
-export function newSession() {
-  state.generateSession = null;
-  state.generateVersions = [];
-  state.currentVersion = null;
-
-  renderSessionList();
-  renderVersionList();
+export function clearConversation() {
+  state.conversationHistory = [];
+  state.currentSchema = null;
+  state.currentDxfPath = null;
   renderConversationHistory();
   renderGeneratePreview();
 
@@ -431,15 +231,14 @@ export function newSession() {
  * DXF 다운로드
  */
 export function downloadDxf() {
-  if (!state.currentVersion?.dxf_path) {
+  if (!state.currentDxfPath) {
     alert('다운로드할 도면이 없습니다.');
     return;
   }
 
-  const dxfPath = state.currentVersion.dxf_path;
+  const dxfPath = state.currentDxfPath;
   const filename = dxfPath.split(/[\\\/]/).pop() || 'generated.dxf';
 
-  // 직접 다운로드 링크 생성
   const a = document.createElement('a');
   a.href = `${API_BASE}/generation/download-dxf?path=${encodeURIComponent(dxfPath)}`;
   a.download = filename;
@@ -452,7 +251,7 @@ export function downloadDxf() {
  * DWG 변환 및 다운로드
  */
 export async function convertToDwg() {
-  if (!state.currentVersion?.dxf_path) {
+  if (!state.currentDxfPath) {
     alert('변환할 도면이 없습니다.');
     return;
   }
@@ -464,11 +263,10 @@ export async function convertToDwg() {
   }
 
   try {
-    // DXF를 DWG로 변환 요청
     const result = await api('/generation/convert-to-dwg', {
       method: 'POST',
       body: {
-        dxf_path: state.currentVersion.dxf_path,
+        dxf_path: state.currentDxfPath,
       },
     });
 
@@ -496,7 +294,7 @@ export async function convertToDwg() {
  * 스키마 상세 보기
  */
 export function showSchemaDetail() {
-  if (!state.currentVersion?.schema) {
+  if (!state.currentSchema) {
     alert('스키마 정보가 없습니다.');
     return;
   }
@@ -506,11 +304,11 @@ export function showSchemaDetail() {
   modal.innerHTML = `
     <div class="modal-content">
       <div class="modal-header">
-        <h3>스키마 상세 (v${state.currentVersion.version_number})</h3>
+        <h3>스키마 상세</h3>
         <button class="btn ghost modal-close">&times;</button>
       </div>
       <div class="modal-body">
-        <pre style="max-height:400px; overflow:auto; background:var(--surface-2); padding:12px; border-radius:8px;">${JSON.stringify(state.currentVersion.schema, null, 2)}</pre>
+        <pre style="max-height:400px; overflow:auto; background:var(--surface-2); padding:12px; border-radius:8px;">${JSON.stringify(state.currentSchema, null, 2)}</pre>
       </div>
     </div>
   `;
@@ -527,15 +325,13 @@ export function showSchemaDetail() {
  * 생성 섹션 초기화
  */
 export function initGenerateSection() {
-  // 구독 상태에 따른 UI 표시
   const lock = $('generateLock');
   const content = $('generateContent');
 
   if (state.subscribed) {
     if (lock) lock.style.display = 'none';
     if (content) content.style.display = 'grid';
-    loadSessions();
-    loadReferenceFiles();
+    loadTemplateFiles();
   } else {
     if (lock) lock.style.display = 'block';
     if (content) content.style.display = 'none';

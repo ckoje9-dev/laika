@@ -23,6 +23,11 @@ export function setTab(tab) {
   if ($("analyzeLock")) $("analyzeLock").style.display = state.loggedIn ? "none" : "inline-flex";
   if ($("generateLock")) $("generateLock").style.display = state.subscribed ? "none" : "inline-flex";
   if ($("generateContent")) $("generateContent").style.display = state.subscribed ? "grid" : "none";
+
+  // AI 도면 생성 탭 진입 시 템플릿 목록 새로고침
+  if (tab === "generate" && state.subscribed) {
+    import('./generate.js').then(mod => mod.loadTemplateFiles()).catch(() => {});
+  }
 }
 
 export function setDetailTab(tab) {

@@ -257,29 +257,6 @@
       </div>
 
       <div id="generateContent" class="layout" style="display:none;">
-        <!-- 세션 관리 영역 -->
-        <div class="card" style="grid-column: span 2;">
-          <div class="generate-header">
-            <h3>세션</h3>
-            <button class="btn ghost" id="btnNewSession">새 세션</button>
-          </div>
-          <div class="session-list" id="generateSessionList">
-            <div class="muted">저장된 세션이 없습니다.</div>
-          </div>
-        </div>
-
-        <!-- 참조 도면 선택 -->
-        <div class="card" style="grid-column: span 2;">
-          <div class="generate-header">
-            <h3>참조 도면</h3>
-            <button class="btn ghost" id="btnRefreshRefFiles">새로고침</button>
-          </div>
-          <div class="muted" style="margin-bottom:8px;">생성 시 참조할 파싱된 도면을 선택하세요. 선택하지 않으면 프로젝트 전체 데이터를 사용합니다.</div>
-          <div class="ref-file-list" id="refFileList">
-            <div class="muted">프로젝트의 파싱된 파일이 없습니다.</div>
-          </div>
-        </div>
-
         <!-- 메인 작업 영역 -->
         <div class="card generate-workspace" style="grid-column: span 2;">
           <div class="generate-split">
@@ -297,7 +274,6 @@
               <div class="generate-preview" id="generatePreview">
                 <div class="muted" style="display:flex; align-items:center; justify-content:center; height:100%;">도면이 생성되면 여기에 표시됩니다.</div>
               </div>
-              <div class="version-list" id="generateVersionList"></div>
             </div>
           </div>
 
@@ -306,12 +282,17 @@
             <textarea class="input generate-prompt" id="generatePrompt" placeholder="예: 7m x 7m 그리드로 4x3 기둥 배치를 생성해줘" rows="2"></textarea>
             <div class="generate-actions">
               <button class="btn primary" id="btnGenerate">생성하기 <span class="throbber" aria-hidden="true"></span></button>
-              <button class="btn" id="btnModify">수정하기 <span class="throbber" aria-hidden="true"></span></button>
             </div>
           </div>
 
           <!-- 다운로드 영역 -->
           <div class="generate-download">
+            <div class="template-select-wrap">
+              <label>템플릿:</label>
+              <select class="input" id="templateSelect" style="min-width:180px;">
+                <option value="">선택 파일 없음</option>
+              </select>
+            </div>
             <button class="btn ghost" id="btnShowSchema">스키마 보기</button>
             <button class="btn" id="btnDownloadDxf">DXF 다운로드</button>
             <button class="btn" id="btnConvertDwg">DWG 변환 <span class="throbber" aria-hidden="true"></span></button>

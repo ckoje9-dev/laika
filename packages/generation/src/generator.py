@@ -81,13 +81,29 @@ class DrawingGenerator:
 
         return text.strip()
 
-    def _call_llm(self, prompt: str, system: str = None) -> str:
+    def _call_llm(
+        self,
+        prompt: str,
+        system: str = None,
+        conversation_history: list[dict] = None,
+    ) -> str:
         """LLM 호출."""
         self._ensure_llm()
 
         messages = []
         if system:
             messages.append(("system", system))
+
+        # 대화 히스토리 추가
+        if conversation_history:
+            for msg in conversation_history:
+                role = msg.get("role", "human")
+                content = msg.get("content", "")
+                if role == "user":
+                    messages.append(("human", content))
+                elif role == "assistant":
+                    messages.append(("ai", content))
+
         messages.append(("human", prompt))
 
         response = self.llm.invoke(messages)
@@ -97,6 +113,7 @@ class DrawingGenerator:
         self,
         user_request: str,
         context: Optional[str] = None,
+        conversation_history: Optional[list[dict]] = None,
         output_path: Optional[Path] = None,
     ) -> GenerationResult:
         """
@@ -104,7 +121,8 @@ class DrawingGenerator:
 
         Args:
             user_request: 사용자 요청
-            context: RAG 검색 컨텍스트 (선택)
+            context: 템플릿 파싱 데이터 컨텍스트 (선택)
+            conversation_history: 대화 히스토리 (선택)
             output_path: DXF 저장 경로 (선택)
 
         Returns:
@@ -118,7 +136,7 @@ class DrawingGenerator:
         for attempt in range(self.max_retries + 1):
             try:
                 # LLM 호출
-                raw_response = self._call_llm(generate_prompt, system_prompt)
+                raw_response = self._call_llm(generate_prompt, system_prompt, conversation_history)
                 raw_json = self._extract_json(raw_response)
 
                 # 검증
