@@ -131,9 +131,9 @@ export function renderResultView() {
   const sortedLayers = sortRows(layerData, "layers");
   const layerRows = sortedLayers.map((l) => `<tr>
     <td>${l.name}</td>
-    <td style="text-align:center;">${colorPatch(l.colorIndex)}</td>
-    <td style="text-align:center;">${l.visible ? "\u2713" : "-"}</td>
-    <td style="text-align:center;">${l.frozen ? "\u2713" : "-"}</td>
+    <td style="text-align:center;">${colorPatch(l.colorIndex)} <span class="muted" style="font-size:11px;">${l.colorIndex}</span></td>
+    <td style="text-align:center;">${l.visible ? "💡" : '<span style="filter:grayscale(1) opacity(0.4);">💡</span>'}</td>
+    <td style="text-align:center;">${l.frozen ? "❄️" : '<span style="filter:grayscale(1) opacity(0.4);">❄️</span>'}</td>
   </tr>`).join("");
 
   // === 블록 TABLE ===
