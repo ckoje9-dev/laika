@@ -383,3 +383,51 @@ def distance(p1: tuple[float, float], p2: tuple[float, float]) -> float:
     dx = p2[0] - p1[0]
     dy = p2[1] - p1[1]
     return math.sqrt(dx * dx + dy * dy)
+
+
+def vertices_to_wkt_polygon(vertices: list[tuple[float, float]]) -> str | None:
+    """Convert vertices to WKT POLYGON string for PostGIS.
+
+    Args:
+        vertices: List of (x, y) tuples forming a closed polygon
+
+    Returns:
+        WKT string like 'POLYGON((x1 y1, x2 y2, ..., x1 y1))'
+    """
+    if len(vertices) < 3:
+        return None
+
+    # Ensure polygon is closed
+    if vertices[0] != vertices[-1]:
+        vertices = list(vertices) + [vertices[0]]
+
+    coords = ", ".join(f"{x} {y}" for x, y in vertices)
+    return f"POLYGON(({coords}))"
+
+
+def vertices_to_wkt_linestring(vertices: list[tuple[float, float]]) -> str | None:
+    """Convert vertices to WKT LINESTRING string for PostGIS.
+
+    Args:
+        vertices: List of (x, y) tuples
+
+    Returns:
+        WKT string like 'LINESTRING(x1 y1, x2 y2, ...)'
+    """
+    if len(vertices) < 2:
+        return None
+
+    coords = ", ".join(f"{x} {y}" for x, y in vertices)
+    return f"LINESTRING({coords})"
+
+
+def point_to_wkt(point: tuple[float, float]) -> str:
+    """Convert point to WKT POINT string for PostGIS.
+
+    Args:
+        point: (x, y) tuple
+
+    Returns:
+        WKT string like 'POINT(x y)'
+    """
+    return f"POINT({point[0]} {point[1]})"

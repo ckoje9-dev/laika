@@ -2,7 +2,7 @@
 import math
 from typing import Any
 
-from ..geometry import extract_points, points_inside_bbox
+from ..geometry import extract_points, points_inside_bbox, vertices_to_wkt_linestring
 
 
 def _line_direction(p1: tuple[float, float], p2: tuple[float, float]) -> tuple[float, float]:
@@ -352,11 +352,21 @@ def build_wall_records(
         wall_type = wall.pop("wall_type")
         kind = "structural_wall" if wall_type == "structural" else "partition_wall"
 
+        # Generate WKT for PostGIS (wall centerline)
+        start = wall.get("start", {})
+        end = wall.get("end", {})
+        centerline = [
+            (start.get("x", 0), start.get("y", 0)),
+            (end.get("x", 0), end.get("y", 0)),
+        ]
+        geom_wkt = vertices_to_wkt_linestring(centerline)
+
         records.append({
             "file_id": file_id,
             "kind": kind,
             "confidence": None,
             "source_rule": f"layer:{'struct-cwall-layer' if wall_type == 'structural' else 'non-wall-layer'}",
+            "geom_wkt": geom_wkt,  # For PostGIS storage
             "properties": {
                 "wall_index": idx,
                 **wall,

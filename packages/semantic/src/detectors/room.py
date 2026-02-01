@@ -2,7 +2,7 @@
 from collections import defaultdict
 from typing import Any
 
-from ..geometry import polygon_area, point_in_polygon, polygon_centroid, distance
+from ..geometry import polygon_area, point_in_polygon, polygon_centroid, distance, vertices_to_wkt_polygon
 
 
 def _round_point(p: tuple[float, float], precision: float = 1.0) -> tuple[float, float]:
@@ -295,11 +295,15 @@ def build_room_records(
         xs = [p[0] for p in cycle]
         ys = [p[1] for p in cycle]
 
+        # Generate WKT for PostGIS
+        geom_wkt = vertices_to_wkt_polygon(cycle)
+
         records.append({
             "file_id": file_id,
             "kind": "room",
             "confidence": None,
             "source_rule": "wall_enclosure",
+            "geom_wkt": geom_wkt,  # For PostGIS storage
             "properties": {
                 "room_index": idx,
                 "name": room_name,
