@@ -285,3 +285,101 @@ def match_intersection(center: tuple[float, float], intersections: list[tuple[fl
         if abs(cx - ix) <= eps and abs(cy - iy) <= eps:
             return True
     return False
+
+
+def polygon_area(vertices: list[tuple[float, float]]) -> float:
+    """Calculate polygon area using Shoelace formula.
+
+    Args:
+        vertices: List of (x, y) vertices in order (clockwise or counter-clockwise)
+
+    Returns:
+        Absolute area of the polygon
+    """
+    n = len(vertices)
+    if n < 3:
+        return 0.0
+
+    area = 0.0
+    for i in range(n):
+        j = (i + 1) % n
+        area += vertices[i][0] * vertices[j][1]
+        area -= vertices[j][0] * vertices[i][1]
+
+    return abs(area) / 2.0
+
+
+def point_in_polygon(point: tuple[float, float], vertices: list[tuple[float, float]]) -> bool:
+    """Check if point is inside polygon using ray casting algorithm.
+
+    Args:
+        point: (x, y) point to test
+        vertices: List of (x, y) polygon vertices
+
+    Returns:
+        True if point is inside polygon
+    """
+    n = len(vertices)
+    if n < 3:
+        return False
+
+    x, y = point
+    inside = False
+
+    j = n - 1
+    for i in range(n):
+        xi, yi = vertices[i]
+        xj, yj = vertices[j]
+
+        if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
+            inside = not inside
+
+        j = i
+
+    return inside
+
+
+def polygon_centroid(vertices: list[tuple[float, float]]) -> tuple[float, float] | None:
+    """Calculate polygon centroid (center of mass).
+
+    Args:
+        vertices: List of (x, y) vertices
+
+    Returns:
+        (x, y) centroid or None if invalid polygon
+    """
+    n = len(vertices)
+    if n < 3:
+        return None
+
+    # Signed area
+    signed_area = 0.0
+    cx = 0.0
+    cy = 0.0
+
+    for i in range(n):
+        j = (i + 1) % n
+        cross = vertices[i][0] * vertices[j][1] - vertices[j][0] * vertices[i][1]
+        signed_area += cross
+        cx += (vertices[i][0] + vertices[j][0]) * cross
+        cy += (vertices[i][1] + vertices[j][1]) * cross
+
+    if abs(signed_area) < 1e-9:
+        # Degenerate polygon, return simple average
+        return (
+            sum(v[0] for v in vertices) / n,
+            sum(v[1] for v in vertices) / n,
+        )
+
+    signed_area /= 2.0
+    cx /= (6.0 * signed_area)
+    cy /= (6.0 * signed_area)
+
+    return (cx, cy)
+
+
+def distance(p1: tuple[float, float], p2: tuple[float, float]) -> float:
+    """Calculate Euclidean distance between two points."""
+    dx = p2[0] - p1[0]
+    dy = p2[1] - p1[1]
+    return math.sqrt(dx * dx + dy * dy)

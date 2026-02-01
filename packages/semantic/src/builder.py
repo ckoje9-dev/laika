@@ -2,7 +2,7 @@
 from typing import Any, Iterable
 
 from .matchers import match_rule
-from .detectors import border, axis, column
+from .detectors import border, axis, column, wall, room
 
 
 def build_semantic_records(
@@ -69,5 +69,7 @@ def build_all_records(
     borders = border.build_border_records(file_id, blocks, entities, selections)
     axis_summaries = axis.build_axis_summary_records(file_id, borders, entities, selections)
     columns = column.build_column_records(file_id, axis_summaries, entities, selections)
+    walls = wall.build_wall_records(file_id, borders, entities, selections)
+    rooms = room.build_room_records(file_id, walls, entities)
 
-    return basic_records + borders + axis_summaries + columns
+    return basic_records + borders + axis_summaries + columns + walls + rooms
