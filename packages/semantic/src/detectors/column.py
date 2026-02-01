@@ -1,7 +1,7 @@
 """Column detection at grid intersections."""
 from typing import Any
 
-from ..geometry import entity_center_and_size, points_inside_bbox, match_intersection
+from ..geometry import entity_center_and_size, points_inside_bbox, match_intersection, point_to_wkt
 
 
 def assign_column_types(columns: list[dict[str, Any]]) -> None:
@@ -119,11 +119,16 @@ def build_column_records(
     # Convert to semantic records
     records = []
     for col in columns:
+        # Generate WKT for PostGIS
+        center = col.get("center", {})
+        geom_wkt = point_to_wkt((center.get("x", 0), center.get("y", 0)))
+
         records.append({
             "file_id": file_id,
             "kind": "concrete_column",
             "confidence": None,
             "source_rule": "layer:struct-ccol-layer",
+            "geom_wkt": geom_wkt,  # For PostGIS storage
             "properties": col,
         })
 

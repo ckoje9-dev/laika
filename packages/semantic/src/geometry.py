@@ -431,3 +431,43 @@ def point_to_wkt(point: tuple[float, float]) -> str:
         WKT string like 'POINT(x y)'
     """
     return f"POINT({point[0]} {point[1]})"
+
+
+def bbox_to_wkt_polygon(bbox: dict[str, float]) -> str | None:
+    """Convert bounding box dict to WKT POLYGON string.
+
+    Args:
+        bbox: Dictionary with keys xmin, ymin, xmax, ymax (or min_x, min_y, max_x, max_y)
+
+    Returns:
+        WKT string like 'POLYGON((xmin ymin, xmax ymin, xmax ymax, xmin ymax, xmin ymin))'
+    """
+    try:
+        # Handle both naming conventions (xmin/xmax or min_x/max_x)
+        xmin = bbox.get("xmin") if "xmin" in bbox else bbox.get("min_x")
+        ymin = bbox.get("ymin") if "ymin" in bbox else bbox.get("min_y")
+        xmax = bbox.get("xmax") if "xmax" in bbox else bbox.get("max_x")
+        ymax = bbox.get("ymax") if "ymax" in bbox else bbox.get("max_y")
+
+        if None in (xmin, ymin, xmax, ymax):
+            return None
+
+        return f"POLYGON(({xmin} {ymin}, {xmax} {ymin}, {xmax} {ymax}, {xmin} {ymax}, {xmin} {ymin}))"
+    except (TypeError, KeyError):
+        return None
+
+
+def points_to_wkt_multipoint(points: list[tuple[float, float]]) -> str | None:
+    """Convert list of points to WKT MULTIPOINT string.
+
+    Args:
+        points: List of (x, y) tuples
+
+    Returns:
+        WKT string like 'MULTIPOINT((x1 y1), (x2 y2), ...)'
+    """
+    if not points:
+        return None
+
+    coords = ", ".join(f"({x} {y})" for x, y in points)
+    return f"MULTIPOINT({coords})"

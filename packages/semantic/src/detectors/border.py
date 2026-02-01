@@ -1,7 +1,7 @@
 """Border (title block) detection."""
 from typing import Any
 
-from ..geometry import block_bbox_from_entities, transform_bbox
+from ..geometry import block_bbox_from_entities, transform_bbox, bbox_to_wkt_polygon
 
 
 def build_border_records(
@@ -64,11 +64,15 @@ def build_border_records(
         # Transform to world coordinates
         world_bbox = transform_bbox(base_bbox, ent)
 
+        # Generate WKT for PostGIS
+        geom_wkt = bbox_to_wkt_polygon(world_bbox)
+
         records.append({
             "file_id": file_id,
             "kind": "border",
             "confidence": None,
             "source_rule": f"block:{block_key}",
+            "geom_wkt": geom_wkt,  # For PostGIS storage
             "properties": {
                 "block_name": block_key,
                 "insert_handle": ent.get("handle"),

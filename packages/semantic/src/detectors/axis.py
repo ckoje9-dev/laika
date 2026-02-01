@@ -1,7 +1,7 @@
 """Grid axis detection and analysis."""
 from typing import Any
 
-from ..geometry import extract_points, points_inside_bbox, axis_orientation, axis_intersections
+from ..geometry import extract_points, points_inside_bbox, axis_orientation, axis_intersections, points_to_wkt_multipoint, bbox_to_wkt_polygon
 
 
 def build_axis_summary_records(
@@ -90,11 +90,15 @@ def build_axis_summary_records(
         # Compute intersections
         intersections = axis_intersections({"x_axes": x_axes, "y_axes": y_axes})
 
+        # Generate WKT for PostGIS (intersections as MULTIPOINT, bbox as POLYGON)
+        geom_wkt = points_to_wkt_multipoint(intersections) if intersections else bbox_to_wkt_polygon(bbox)
+
         summaries.append({
             "file_id": file_id,
             "kind": "axis_summary",
             "confidence": None,
             "source_rule": "layer:struct-axis-layer",
+            "geom_wkt": geom_wkt,  # For PostGIS storage
             "properties": {
                 "border_index": idx,
                 "border_handle": border.get("properties", {}).get("insert_handle"),
