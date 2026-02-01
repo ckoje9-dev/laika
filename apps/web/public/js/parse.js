@@ -65,7 +65,10 @@ export async function refreshSemanticSummary(file, retries = 4) {
     const hasBorder = (summary.border_count || 0) > 0;
     const hasAxis = Array.isArray(summary.axis_summaries) && summary.axis_summaries.length > 0;
     const hasColumns = (summary.column_count || 0) > 0;
-    if (hasBorder || hasAxis || hasColumns) return;
+    const hasWalls = (summary.wall_count || 0) > 0;
+    const hasRooms = (summary.room_count || 0) > 0;
+    const hasDoors = (summary.door_count || 0) > 0;
+    if (hasBorder || hasAxis || hasColumns || hasWalls || hasRooms || hasDoors) return;
     await sleep(800);
   }
 }

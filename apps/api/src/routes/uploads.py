@@ -446,6 +446,11 @@ async def get_semantic_summary(file_id: str, session: AsyncSession = Depends(get
     borders = []
     axis_summaries = []
     columns = []
+    walls = []
+    rooms = []
+    doors = []
+    room_connectivity = None
+
     def _decode_props(value: Any) -> dict:
         if isinstance(value, dict):
             return value
@@ -455,6 +460,7 @@ async def get_semantic_summary(file_id: str, session: AsyncSession = Depends(get
             except json.JSONDecodeError:
                 return {}
         return {}
+
     for row in rows:
         props = _decode_props(row.properties)
         if row.kind == "border":
@@ -471,7 +477,42 @@ async def get_semantic_summary(file_id: str, session: AsyncSession = Depends(get
             axis_summaries.append(props)
         elif row.kind == "concrete_column":
             columns.append(props)
+        elif row.kind in ("structural_wall", "partition_wall"):
+            walls.append({
+                "wall_index": props.get("wall_index"),
+                "wall_type": "structural" if row.kind == "structural_wall" else "partition",
+                "thickness": props.get("thickness"),
+                "length": props.get("length"),
+                "start": props.get("start"),
+                "end": props.get("end"),
+            })
+        elif row.kind == "room":
+            rooms.append({
+                "room_index": props.get("room_index"),
+                "name": props.get("name"),
+                "area": props.get("area"),
+                "area_sqm": props.get("area_sqm"),
+                "centroid": props.get("centroid"),
+                "vertex_count": props.get("vertex_count"),
+                "texts_inside": props.get("texts_inside"),
+            })
+        elif row.kind == "door":
+            doors.append({
+                "door_index": props.get("door_index"),
+                "center": props.get("center"),
+                "width": props.get("width"),
+                "wall": props.get("wall"),
+                "connects_rooms": props.get("connects_rooms"),
+                "connects_room_names": props.get("connects_room_names"),
+            })
+        elif row.kind == "room_connectivity":
+            room_connectivity = {
+                "edges": props.get("edges"),
+                "room_count": props.get("room_count"),
+                "door_count": props.get("door_count"),
+            }
 
+    # Group columns by type
     column_types = {}
     column_type_counts = {}
     for col in columns:
@@ -481,6 +522,11 @@ async def get_semantic_summary(file_id: str, session: AsyncSession = Depends(get
             continue
         column_types.setdefault(ctype, size)
         column_type_counts[ctype] = column_type_counts.get(ctype, 0) + 1
+
+    # Group walls by type
+    structural_walls = [w for w in walls if w.get("wall_type") == "structural"]
+    partition_walls = [w for w in walls if w.get("wall_type") == "partition"]
+
     return {
         "file_id": file_id,
         "border_count": len(borders),
@@ -491,6 +537,15 @@ async def get_semantic_summary(file_id: str, session: AsyncSession = Depends(get
             {"type": k, "size": v, "count": column_type_counts.get(k, 0)}
             for k, v in sorted(column_types.items(), key=lambda x: x[0])
         ],
+        "wall_count": len(walls),
+        "structural_wall_count": len(structural_walls),
+        "partition_wall_count": len(partition_walls),
+        "walls": walls,
+        "room_count": len(rooms),
+        "rooms": rooms,
+        "door_count": len(doors),
+        "doors": doors,
+        "room_connectivity": room_connectivity,
     }
 
 

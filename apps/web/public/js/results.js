@@ -349,6 +349,8 @@ export function renderAiResultView() {
   };
 
   const activeSummary = activeFile.semanticSummary || {};
+
+  // 기둥 데이터
   const columnTypes = Array.isArray(activeSummary.column_types) ? activeSummary.column_types : [];
   const columnCount = typeof activeSummary.column_count === "number" ? activeSummary.column_count : 0;
   const columnRows = columnTypes
@@ -365,6 +367,51 @@ export function renderAiResultView() {
     })
     .join("");
 
+  // 벽체 데이터
+  const wallCount = typeof activeSummary.wall_count === "number" ? activeSummary.wall_count : 0;
+  const structuralWallCount = typeof activeSummary.structural_wall_count === "number" ? activeSummary.structural_wall_count : 0;
+  const partitionWallCount = typeof activeSummary.partition_wall_count === "number" ? activeSummary.partition_wall_count : 0;
+  const walls = Array.isArray(activeSummary.walls) ? activeSummary.walls : [];
+  const wallRows = walls.slice(0, 20).map((w) => {
+    const typeLabel = w.wall_type === "structural" ? "구조벽" : "칸막이벽";
+    const thickness = typeof w.thickness === "number" ? w.thickness.toFixed(0) : "-";
+    const length = typeof w.length === "number" ? w.length.toFixed(0) : "-";
+    return `<tr><td>${w.wall_index || "-"}</td><td>${typeLabel}</td><td>${thickness}</td><td>${length}</td></tr>`;
+  }).join("");
+
+  // 실 데이터
+  const roomCount = typeof activeSummary.room_count === "number" ? activeSummary.room_count : 0;
+  const rooms = Array.isArray(activeSummary.rooms) ? activeSummary.rooms : [];
+  const roomRows = rooms.map((r) => {
+    const name = r.name || "-";
+    const areaSqm = typeof r.area_sqm === "number" ? r.area_sqm.toFixed(2) : "-";
+    const vertexCount = typeof r.vertex_count === "number" ? r.vertex_count : "-";
+    return `<tr><td>${r.room_index || "-"}</td><td>${name}</td><td>${areaSqm}</td><td>${vertexCount}</td></tr>`;
+  }).join("");
+
+  // 문 데이터
+  const doorCount = typeof activeSummary.door_count === "number" ? activeSummary.door_count : 0;
+  const doors = Array.isArray(activeSummary.doors) ? activeSummary.doors : [];
+  const doorRows = doors.map((d) => {
+    const width = typeof d.width === "number" ? d.width.toFixed(0) : "-";
+    const wallIdx = d.wall?.wall_index || "-";
+    const connectsRooms = Array.isArray(d.connects_room_names) && d.connects_room_names.length
+      ? d.connects_room_names.filter(Boolean).join(" ↔ ")
+      : (Array.isArray(d.connects_rooms) ? d.connects_rooms.join(" ↔ ") : "-");
+    return `<tr><td>${d.door_index || "-"}</td><td>${width}</td><td>${wallIdx}</td><td>${connectsRooms}</td></tr>`;
+  }).join("");
+
+  // 연결 그래프
+  const connectivity = activeSummary.room_connectivity || {};
+  const edges = Array.isArray(connectivity.edges) ? connectivity.edges : [];
+  const edgeRows = edges.map((e) => {
+    const roomA = rooms.find(r => r.room_index === e.from);
+    const roomB = rooms.find(r => r.room_index === e.to);
+    const nameA = roomA?.name || `실${e.from}`;
+    const nameB = roomB?.name || `실${e.to}`;
+    return `<tr><td>${nameA}</td><td>↔</td><td>${nameB}</td></tr>`;
+  }).join("");
+
   view.innerHTML = `
     <div class="card" style="margin-top:10px; background:var(--surface-2);">
       <div id="dxfPreview" class="preview-frame"></div>
@@ -374,21 +421,75 @@ export function renderAiResultView() {
       <div class="muted" style="margin-top:4px;">X축: ${formatAxisLine(yAxes, ySpacing)}</div>
       <div class="muted">Y축: ${formatAxisLine(xAxes, xSpacing)}</div>
     </div>
-    <div class="card" style="margin-top:12px; background:var(--surface-2);">
-      <div style="font-weight:700; margin-bottom:6px;">기둥 일람표 (${columnCount}개)</div>
-      <table style="width:100%; border-collapse: collapse;">
-        <thead>
-          <tr>
-            <th style="text-align:left; padding:6px 4px; border-bottom:1px solid var(--border);">Type</th>
-            <th style="text-align:left; padding:6px 4px; border-bottom:1px solid var(--border);">Size</th>
-            <th style="text-align:left; padding:6px 4px; border-bottom:1px solid var(--border);">Count</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${columnRows || "<tr><td colspan='3' class='muted' style='padding:6px 4px;'>결과 없음</td></tr>"}
-        </tbody>
-      </table>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">
+      <div class="card" style="background:var(--surface-2);">
+        <div style="font-weight:700; margin-bottom:6px;">기둥 (${columnCount}개)</div>
+        <div class="table-wrap" style="max-height:160px;">
+          <table style="width:100%; border-collapse: collapse;">
+            <thead><tr>
+              <th style="text-align:left; padding:4px;">Type</th>
+              <th style="text-align:left; padding:4px;">Size</th>
+              <th style="text-align:right; padding:4px;">Count</th>
+            </tr></thead>
+            <tbody>${columnRows || "<tr><td colspan='3' class='muted'>-</td></tr>"}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" style="background:var(--surface-2);">
+        <div style="font-weight:700; margin-bottom:6px;">벽체 (${wallCount}개) <span class="muted" style="font-weight:400;">구조 ${structuralWallCount} / 칸막이 ${partitionWallCount}</span></div>
+        <div class="table-wrap" style="max-height:160px;">
+          <table style="width:100%; border-collapse: collapse;">
+            <thead><tr>
+              <th style="text-align:left; padding:4px;">#</th>
+              <th style="text-align:left; padding:4px;">타입</th>
+              <th style="text-align:right; padding:4px;">두께</th>
+              <th style="text-align:right; padding:4px;">길이</th>
+            </tr></thead>
+            <tbody>${wallRows || "<tr><td colspan='4' class='muted'>-</td></tr>"}</tbody>
+          </table>
+        </div>
+      </div>
     </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">
+      <div class="card" style="background:var(--surface-2);">
+        <div style="font-weight:700; margin-bottom:6px;">실 (${roomCount}개)</div>
+        <div class="table-wrap" style="max-height:160px;">
+          <table style="width:100%; border-collapse: collapse;">
+            <thead><tr>
+              <th style="text-align:left; padding:4px;">#</th>
+              <th style="text-align:left; padding:4px;">이름</th>
+              <th style="text-align:right; padding:4px;">면적(㎡)</th>
+              <th style="text-align:right; padding:4px;">꼭짓점</th>
+            </tr></thead>
+            <tbody>${roomRows || "<tr><td colspan='4' class='muted'>-</td></tr>"}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" style="background:var(--surface-2);">
+        <div style="font-weight:700; margin-bottom:6px;">문 (${doorCount}개)</div>
+        <div class="table-wrap" style="max-height:160px;">
+          <table style="width:100%; border-collapse: collapse;">
+            <thead><tr>
+              <th style="text-align:left; padding:4px;">#</th>
+              <th style="text-align:right; padding:4px;">폭</th>
+              <th style="text-align:right; padding:4px;">벽체</th>
+              <th style="text-align:left; padding:4px;">연결</th>
+            </tr></thead>
+            <tbody>${doorRows || "<tr><td colspan='4' class='muted'>-</td></tr>"}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    ${edges.length ? `
+    <div class="card" style="margin-top:12px; background:var(--surface-2);">
+      <div style="font-weight:700; margin-bottom:6px;">실 연결 그래프</div>
+      <div class="table-wrap" style="max-height:120px;">
+        <table style="width:100%; border-collapse: collapse;">
+          <tbody>${edgeRows}</tbody>
+        </table>
+      </div>
+    </div>
+    ` : ""}
   `;
   renderDxfPreview(activeFile, borderBBox);
 }
